@@ -1,4 +1,4 @@
-package pdfcpu
+package pdf
 
 import (
 	"image"
@@ -9,32 +9,30 @@ import (
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	core "github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
-	basepdf "github.com/slobbe/collate/internal/pdf"
 )
 
-func TestEngineCopiesPagesInRequestedOrder(t *testing.T) {
+func TestOpenAndNewCopyPagesInRequestedOrder(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	frontPath := createImagePDF(t, dir, "front.pdf", []image.Point{{X: 101, Y: 102}, {X: 103, Y: 104}})
 	backPath := createImagePDF(t, dir, "back.pdf", []image.Point{{X: 201, Y: 202}, {X: 203, Y: 204}})
 
-	engine := New()
-	front, err := engine.Open(frontPath)
+	front, err := Open(frontPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	back, err := engine.Open(backPath)
+	back, err := Open(backPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	output, err := engine.New()
+	output, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for _, source := range []struct {
-		document basepdf.Document
+		document Document
 		index    int
 	}{
 		{front, 0},
@@ -56,7 +54,7 @@ func TestEngineCopiesPagesInRequestedOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := engine.Open(outputPath)
+	result, err := Open(outputPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +73,7 @@ func TestDocumentPageAtRejectsOutOfRangeIndex(t *testing.T) {
 	dir := t.TempDir()
 	path := createImagePDF(t, dir, "document.pdf", []image.Point{{X: 101, Y: 102}})
 
-	document, err := New().Open(path)
+	document, err := Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +88,7 @@ func TestDocumentPageAtRejectsOutOfRangeIndex(t *testing.T) {
 func TestDocumentAppendPageRejectsForeignPage(t *testing.T) {
 	t.Parallel()
 
-	output, err := New().New()
+	output, err := New()
 	if err != nil {
 		t.Fatal(err)
 	}

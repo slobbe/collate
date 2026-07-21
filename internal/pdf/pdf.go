@@ -1,4 +1,4 @@
-package pdfcpu
+package pdf
 
 import (
 	"fmt"
@@ -7,19 +7,10 @@ import (
 	core "github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
-	"github.com/slobbe/collate/internal/pdf"
 )
 
-// Engine implements pdf.Engine using pdfcpu.
-type Engine struct{}
-
-// New returns a pdfcpu-backed PDF engine.
-func New() pdf.Engine {
-	return Engine{}
-}
-
 // Open loads path as a PDF document.
-func (Engine) Open(path string) (pdf.Document, error) {
+func Open(path string) (Document, error) {
 	ctx, err := api.ReadContextFile(path)
 	if err != nil {
 		return nil, err
@@ -29,7 +20,7 @@ func (Engine) Open(path string) (pdf.Document, error) {
 }
 
 // New creates an empty PDF document.
-func (Engine) New() (pdf.Document, error) {
+func New() (Document, error) {
 	conf := model.NewDefaultConfiguration()
 	conf.Cmd = model.MERGECREATE
 	conf.ValidationMode = model.ValidationRelaxed
@@ -50,7 +41,7 @@ func (d *document) PageCount() int {
 	return d.ctx.PageCount
 }
 
-func (d *document) PageAt(index int) (pdf.Page, error) {
+func (d *document) PageAt(index int) (Page, error) {
 	if index < 0 || index >= d.PageCount() {
 		return nil, fmt.Errorf("page index %d out of range [0, %d)", index, d.PageCount())
 	}
@@ -58,7 +49,7 @@ func (d *document) PageAt(index int) (pdf.Page, error) {
 	return page{document: d, number: index + 1}, nil
 }
 
-func (d *document) AppendPage(source pdf.Page) error {
+func (d *document) AppendPage(source Page) error {
 	page, ok := source.(page)
 	if !ok {
 		return fmt.Errorf("unsupported page type %T", source)
@@ -78,6 +69,5 @@ type page struct {
 
 func (page) PDFPage() {}
 
-var _ pdf.Engine = Engine{}
-var _ pdf.Document = (*document)(nil)
-var _ pdf.Page = page{}
+var _ Document = (*document)(nil)
+var _ Page = page{}

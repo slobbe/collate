@@ -3,7 +3,7 @@ package collate
 import (
 	"fmt"
 
-	"github.com/slobbe/collate/internal/pdf/pdfcpu"
+	"github.com/slobbe/collate/internal/pdf"
 )
 
 type BackOrder string
@@ -32,8 +32,6 @@ func Collate(
 	if _, err := ParseBackOrder(string(backOrder)); err != nil {
 		return err
 	}
-
-	pdf := pdfcpu.Engine{}
 
 	front, err := pdf.Open(frontPath)
 	if err != nil {

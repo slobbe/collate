@@ -12,8 +12,3 @@ type Document interface {
 	AppendPage(page Page) error
 	Save(path string) error
 }
-
-type Engine interface {
-	Open(path string) (Document, error)
-	New() (Document, error)
-}
