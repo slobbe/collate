@@ -25,3 +25,21 @@ Supported `-back-order` values are:
 
 - `reverse` (default)
 - `forward`
+
+## Releases
+
+Download the archive for your operating system and CPU architecture from the
+[GitHub Releases](https://github.com/slobbe/collate/releases) page. Releases
+include Linux, macOS, and Windows builds for AMD64 and ARM64, plus a
+`checksums.txt` file for verification.
+
+Linux and macOS archives use `tar.gz`; Windows archives use `zip`. Creating and
+pushing a version tag, such as `v0.1.0`, triggers the release workflow only
+when the tagged commit is contained in `main`:
+
+```sh
+git switch main
+git pull --ff-only
+git tag v0.1.0
+git push origin v0.1.0
+```

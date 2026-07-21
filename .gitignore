@@ -29,3 +29,6 @@ go.work.sum
 
 # output binaries
 /bin
+
+# GoReleaser artifacts
+/dist
