@@ -25,7 +25,7 @@ To build from source, clone the repository and run `go build` in the `collate` d
 ```sh
 git clone https://github.com/slobbe/collate.git
 cd collate
-go build
+go build -o collate ./cmd/collate
 ```
 
 ## Development
