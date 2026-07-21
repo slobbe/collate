@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"os"
@@ -54,9 +54,9 @@ func TestNormalizePDFPathRequiresPDFExtension(t *testing.T) {
 		{path: "document.png", err: true},
 	} {
 		t.Run(test.path, func(t *testing.T) {
-			_, err := normalizePDFPath(test.path)
+			_, err := NormalizePDFPath(test.path)
 			if test.err && err == nil {
-				t.Fatal("normalizePDFPath succeeded, want an error")
+				t.Fatal("NormalizePDFPath succeeded, want an error")
 			}
 			if !test.err && err != nil {
 				t.Fatal(err)

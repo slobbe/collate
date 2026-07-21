@@ -4,10 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/slobbe/collate/internal/collate"
+	"github.com/slobbe/collate/internal/utils"
 )
 
 func main() {
@@ -36,7 +35,7 @@ func main() {
 
 	paths := make([]string, len(flag.Args()))
 	for i, path := range flag.Args() {
-		paths[i], err = normalizePDFPath(path)
+		paths[i], err = utils.NormalizePDFPath(path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: normalize path %q: %v\n", path, err)
 			os.Exit(2)
@@ -47,46 +46,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
-}
 
-func normalizePDFPath(path string) (string, error) {
-	normalized, err := normalizePath(path)
-	if err != nil {
-		return "", err
-	}
-	if !strings.EqualFold(filepath.Ext(normalized), ".pdf") {
-		return "", fmt.Errorf("expected a .pdf file")
-	}
-	return normalized, nil
-}
-
-func normalizePath(path string) (string, error) {
-	if path == "" {
-		return "", fmt.Errorf("path must not be empty")
-	}
-
-	if path[0] == '~' {
-		switch {
-		case path == "~":
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return "", fmt.Errorf("resolve home directory: %w", err)
-			}
-			path = home
-		case len(path) > 1 && os.IsPathSeparator(path[1]):
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return "", fmt.Errorf("resolve home directory: %w", err)
-			}
-			path = filepath.Join(home, path[2:])
-		default:
-			return "", fmt.Errorf("unsupported home path; use ~ or ~/path")
-		}
-	}
-
-	absolute, err := filepath.Abs(path)
-	if err != nil {
-		return "", fmt.Errorf("resolve absolute path: %w", err)
-	}
-	return filepath.Clean(absolute), nil
+	fmt.Printf("collated successfully: %s\n", paths[2])
+	os.Exit(0)
 }
