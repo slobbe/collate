@@ -6,6 +6,7 @@ on:
       - "v[0-9]*"
 
 permissions:
+  actions: read
   contents: write
 
 jobs:
@@ -22,6 +23,21 @@ jobs:
           git fetch origin main:refs/remotes/origin/main
           if ! git merge-base --is-ancestor "${{ github.sha }}" "origin/main"; then
             echo "The release tag must point to a commit contained in main."
+            exit 1
+          fi
+
+      - name: Require successful CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh run list \
+            --repo "${{ github.repository }}" \
+            --workflow ci.yml \
+            --commit "${{ github.sha }}" \
+            --status completed \
+            --json conclusion \
+            --jq 'any(.[]; .conclusion == "success")' | grep -qx true; then
+            echo "A successful CI run for this commit is required before release."
             exit 1
           fi
 
