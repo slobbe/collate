@@ -11,7 +11,7 @@ collate [flags] <front.pdf> <back.pdf> <output.pdf>
 `back.pdf` is assumed to be in reverse order by default, producing `front 1, back N, front 2, back N-1, ...`. Use `-back-order=forward` when back pages are in forward order:
 
 ```sh
-collate -back-order=forward ~/scans/front.pdf ~/scans/back.pdf ./output.pdf
+collate -back-order=forward front.pdf back.pdf output.pdf
 ```
 
 ## Install
@@ -25,7 +25,7 @@ To build from source, clone the repository and run `go build` in the `collate` d
 ```sh
 git clone https://github.com/slobbe/collate.git
 cd collate
-go build -o collate ./cmd/collate
+go build -o bin/collate ./cmd/collate
 ```
 
 ## Development
