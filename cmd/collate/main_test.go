@@ -38,7 +38,7 @@ func TestRunRejectsMissingRequiredInputFlags(t *testing.T) {
 			if !strings.Contains(stderr, test.want) {
 				t.Fatalf("stderr = %q, want %q", stderr, test.want)
 			}
-			if !strings.Contains(stderr, "usage: collate -f <front.pdf> -b <back.pdf> -o <output.pdf> [flags]") {
+			if !strings.Contains(stderr, "usage: collate merge -f <front.pdf> -b <back.pdf> -o <output.pdf> [flags]") {
 				t.Fatalf("stderr = %q, want usage", stderr)
 			}
 		})
@@ -103,12 +103,49 @@ func TestRunHelp(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("run() exit code = %d, want 0", code)
 	}
-	if !strings.Contains(stderr, "usage: collate -f <front.pdf> -b <back.pdf> -o <output.pdf> [flags]") {
+	if !strings.Contains(stderr, "usage: collate merge -f <front.pdf> -b <back.pdf> -o <output.pdf> [flags]") {
 		t.Fatalf("stderr = %q, want usage", stderr)
 	}
 }
 
+func TestRunRootUsage(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		code int
+		want string
+	}{
+		{
+			name: "no command",
+			code: 2,
+			want: "usage: collate <command> [flags]",
+		},
+		{
+			name: "unknown command",
+			args: []string{"split"},
+			code: 2,
+			want: `error: unknown command "split"`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			code, _, stderr := runRootCommand(test.args)
+			if code != test.code {
+				t.Fatalf("run() exit code = %d, want %d", code, test.code)
+			}
+			if !strings.Contains(stderr, test.want) {
+				t.Fatalf("stderr = %q, want %q", stderr, test.want)
+			}
+		})
+	}
+}
+
 func runCommand(args []string) (int, string, string) {
+	return runRootCommand(append([]string{"merge"}, args...))
+}
+
+func runRootCommand(args []string) (int, string, string) {
 	var stdout, stderr bytes.Buffer
 	code := run(args, &stdout, &stderr)
 	return code, stdout.String(), stderr.String()

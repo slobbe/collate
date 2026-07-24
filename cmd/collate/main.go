@@ -15,7 +15,32 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
-	flags := flag.NewFlagSet("collate", flag.ContinueOnError)
+	if len(args) == 0 {
+		rootUsage(stderr)
+		return 2
+	}
+
+	switch args[0] {
+	case "merge":
+		return runMerge(args[1:], stdout, stderr)
+	case "-h", "--help", "help":
+		rootUsage(stdout)
+		return 0
+	default:
+		fmt.Fprintf(stderr, "error: unknown command %q\n", args[0])
+		rootUsage(stderr)
+		return 2
+	}
+}
+
+func rootUsage(output io.Writer) {
+	fmt.Fprintln(output, "usage: collate <command> [flags]")
+	fmt.Fprintln(output, "\ncommands:")
+	fmt.Fprintln(output, "  merge    rebuild a duplex PDF from front and back simplex scans")
+}
+
+func runMerge(args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("collate merge", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 
 	frontFlag := flags.String("f", "", "path to front PDF")

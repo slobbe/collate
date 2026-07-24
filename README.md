@@ -5,13 +5,13 @@ Rebuild duplex documents from simplex PDF scans.
 ## Usage
 
 ```text
-collate -f <front.pdf> -b <back.pdf> -o <output.pdf> [flags]
+collate merge -f <front.pdf> -b <back.pdf> -o <output.pdf> [flags]
 ```
 
 `back.pdf` is assumed to be in reverse order by default, producing `front 1, back N, front 2, back N-1, ...`. Use `--backorder=forward` when back pages are in forward order:
 
 ```sh
-collate -f front.pdf -b back.pdf -o output.pdf --backorder=forward
+collate merge -f front.pdf -b back.pdf -o output.pdf --backorder=forward
 ```
 
 ## Install
