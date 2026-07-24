@@ -72,6 +72,59 @@ func TestRunScanScansAndSavesSelectedDevice(t *testing.T) {
 	}
 }
 
+func TestRunScanListsAvailableDevices(t *testing.T) {
+	code, stdout, stderr := runScanCommand([]string{"--device-list"}, func(context.Context) ([]scanner.Scanner, error) {
+		return []scanner.Scanner{
+			&scanTestScanner{info: scanner.Info{Device: "airscan:e0:OfficeJet", Description: "HP OfficeJet Pro 9010"}},
+			&scanTestScanner{info: scanner.Info{Device: "test:0", Description: "Virtual scanner"}},
+		}, nil
+	})
+
+	if code != 0 {
+		t.Fatalf("RunScan() exit code = %d, want 0", code)
+	}
+	const want = "Available scanners:\n- HP OfficeJet Pro 9010\n  device: airscan:e0:OfficeJet\n- Virtual scanner\n  device: test:0\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestRunScanReportsNoDevices(t *testing.T) {
+	code, stdout, stderr := runScanCommand([]string{"--device-list"}, func(context.Context) ([]scanner.Scanner, error) {
+		return nil, nil
+	})
+
+	if code != 0 {
+		t.Fatalf("RunScan() exit code = %d, want 0", code)
+	}
+	if stdout != "No scanners found.\n" {
+		t.Fatalf("stdout = %q, want no-scanners message", stdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestRunScanRejectsDeviceListWithScanOptions(t *testing.T) {
+	code, _, stderr := runScanCommand([]string{
+		"--device-list",
+		"--device", "test:0",
+	}, func(context.Context) ([]scanner.Scanner, error) {
+		t.Fatal("discover was called")
+		return nil, nil
+	})
+
+	if code != 2 {
+		t.Fatalf("RunScan() exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, "error: --device-list cannot be combined with scan options") {
+		t.Fatalf("stderr = %q, want device-list conflict error", stderr)
+	}
+}
+
 func TestRunScanRequiresFlags(t *testing.T) {
 	for _, test := range []struct {
 		name string
