@@ -1,6 +1,8 @@
 package collate
 
 import (
+	"context"
+	"errors"
 	"image"
 	"image/png"
 	"os"
@@ -66,7 +68,7 @@ func TestCollateBackOrder(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			outputPath := filepath.Join(dir, test.name+".pdf")
-			if err := Collate(frontPath, backPath, outputPath, test.order); err != nil {
+			if err := Collate(context.Background(), frontPath, backPath, outputPath, test.order); err != nil {
 				t.Fatal(err)
 			}
 
@@ -100,7 +102,7 @@ func TestCollateAllowsOneExtraFrontPage(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			outputPath := filepath.Join(dir, test.name+".pdf")
-			if err := Collate(frontPath, backPath, outputPath, test.order); err != nil {
+			if err := Collate(context.Background(), frontPath, backPath, outputPath, test.order); err != nil {
 				t.Fatal(err)
 			}
 
@@ -133,11 +135,21 @@ func TestCollateRejectsInvalidPageCounts(t *testing.T) {
 			frontPath := createImagePDF(t, dir, "front.pdf", test.frontPages)
 			backPath := createImagePDF(t, dir, "back.pdf", test.backPages)
 
-			err := Collate(frontPath, backPath, filepath.Join(dir, "output.pdf"), BackOrderReverse)
+			err := Collate(context.Background(), frontPath, backPath, filepath.Join(dir, "output.pdf"), BackOrderReverse)
 			if err == nil {
 				t.Fatal("Collate succeeded, want a page-count mismatch error")
 			}
 		})
+	}
+}
+
+func TestCollateCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := Collate(ctx, "front.pdf", "back.pdf", "output.pdf", BackOrderReverse)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Collate() error = %v, want context.Canceled", err)
 	}
 }
 

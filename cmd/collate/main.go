@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 
 	"github.com/slobbe/collate/internal/collate"
 	"github.com/slobbe/collate/internal/utils"
@@ -13,10 +16,27 @@ import (
 var version = "dev"
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	os.Exit(runWithSignals(os.Args[1:], os.Stdout, os.Stderr))
 }
 
-func run(args []string, stdout, stderr io.Writer) int {
+func runWithSignals(args []string, stdout, stderr io.Writer) int {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	go func() {
+		<-ctx.Done()
+		stop()
+	}()
+
+	return run(ctx, args, stdout, stderr)
+}
+
+func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	if err := ctx.Err(); err != nil {
+		fmt.Fprintln(stderr, "interrupted")
+		return 130
+	}
+
 	if len(args) == 0 {
 		rootUsage(stderr)
 		return 2
@@ -24,7 +44,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	switch args[0] {
 	case "merge":
-		return runMerge(args[1:], stdout, stderr)
+		return runMerge(ctx, args[1:], stdout, stderr)
 	case "--version":
 		fmt.Fprintf(stdout, "collate %s\n", version)
 		return 0
@@ -46,7 +66,7 @@ func rootUsage(output io.Writer) {
 	fmt.Fprintln(output, "  merge    rebuild a duplex PDF from front and back simplex scans")
 }
 
-func runMerge(args []string, stdout, stderr io.Writer) int {
+func runMerge(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("collate merge", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 
@@ -115,7 +135,11 @@ func runMerge(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	if err := collate.Collate(frontPath, backPath, outputPath, backOrder); err != nil {
+	if err := collate.Collate(ctx, frontPath, backPath, outputPath, backOrder); err != nil {
+		if errors.Is(err, context.Canceled) {
+			fmt.Fprintln(stderr, "interrupted")
+			return 130
+		}
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}

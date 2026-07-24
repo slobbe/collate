@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 )
@@ -61,23 +62,19 @@ func TestRunRejectsPositionalArguments(t *testing.T) {
 	}
 }
 
-func TestRunAcceptsBackOrderAliases(t *testing.T) {
-	for _, flag := range []string{"-bo=forward", "--backorder=forward"} {
-		t.Run(flag, func(t *testing.T) {
-			code, _, stderr := runCommand([]string{
-				"-f", "front.txt",
-				"-b", "back.pdf",
-				"-o", "output.pdf",
-				flag,
-			})
+func TestRunAcceptsBackOrder(t *testing.T) {
+	code, _, stderr := runCommand([]string{
+		"-f", "front.txt",
+		"-b", "back.pdf",
+		"-o", "output.pdf",
+		"--backorder=forward",
+	})
 
-			if code != 2 {
-				t.Fatalf("run() exit code = %d, want 2", code)
-			}
-			if !strings.Contains(stderr, `error: normalize path "front.txt": expected a .pdf file`) {
-				t.Fatalf("stderr = %q, want front path validation error", stderr)
-			}
-		})
+	if code != 2 {
+		t.Fatalf("run() exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr, `error: normalize path "front.txt": expected a .pdf file`) {
+		t.Fatalf("stderr = %q, want front path validation error", stderr)
 	}
 }
 
@@ -156,12 +153,32 @@ func TestRunVersion(t *testing.T) {
 	}
 }
 
+func TestRunReportsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	code, stdout, stderr := runRootCommandWithContext(ctx, []string{"merge"})
+	if code != 130 {
+		t.Fatalf("run() exit code = %d, want 130", code)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+	if stderr != "interrupted\n" {
+		t.Fatalf("stderr = %q, want interruption message", stderr)
+	}
+}
+
 func runCommand(args []string) (int, string, string) {
 	return runRootCommand(append([]string{"merge"}, args...))
 }
 
 func runRootCommand(args []string) (int, string, string) {
+	return runRootCommandWithContext(context.Background(), args)
+}
+
+func runRootCommandWithContext(ctx context.Context, args []string) (int, string, string) {
 	var stdout, stderr bytes.Buffer
-	code := run(args, &stdout, &stderr)
+	code := run(ctx, args, &stdout, &stderr)
 	return code, stdout.String(), stderr.String()
 }

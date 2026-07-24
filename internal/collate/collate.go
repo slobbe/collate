@@ -1,6 +1,7 @@
 package collate
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/slobbe/collate/internal/pdf"
@@ -24,11 +25,16 @@ func ParseBackOrder(value string) (BackOrder, error) {
 }
 
 func Collate(
+	ctx context.Context,
 	frontPath string,
 	backPath string,
 	outputPath string,
 	backOrder BackOrder,
 ) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	if _, err := ParseBackOrder(string(backOrder)); err != nil {
 		return err
 	}
@@ -38,9 +44,17 @@ func Collate(
 		return fmt.Errorf("open front PDF: %w", err)
 	}
 
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	back, err := pdf.Open(backPath)
 	if err != nil {
 		return fmt.Errorf("open back PDF: %w", err)
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	if back.PageCount() > front.PageCount() || front.PageCount() > back.PageCount()+1 {
@@ -57,6 +71,10 @@ func Collate(
 	}
 
 	for i := 0; i < front.PageCount(); i++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		frontPage, err := front.PageAt(i)
 		if err != nil {
 			return fmt.Errorf("read front page %d: %w", i+1, err)
@@ -81,6 +99,10 @@ func Collate(
 		if err := output.AppendPage(backPage); err != nil {
 			return fmt.Errorf("add back page %d: %w", backIndex+1, err)
 		}
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	if err := output.Save(outputPath); err != nil {
