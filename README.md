@@ -14,6 +14,14 @@ collate merge [flags] -f <front.pdf> -b <back.pdf> -o <output.pdf>
 collate merge -f front.pdf -b back.pdf -o output.pdf --backorder=forward
 ```
 
+List scanners available to collate:
+
+```sh
+collate scanner list
+```
+
+On Linux, scanner discovery uses SANE's `scanimage` command, commonly provided by the `sane-utils` package. Device visibility may also depend on SANE backend support, device permissions, udev rules, or network configuration.
+
 ## Install
 
 Download the archive for your operating system and CPU architecture from [GitHub Releases](https://github.com/slobbe/collate/releases).

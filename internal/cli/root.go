@@ -21,6 +21,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, version s
 	switch args[0] {
 	case "merge":
 		return RunMerge(ctx, args[1:], stdout, stderr)
+	case "scanner":
+		return RunScanner(ctx, args[1:], stdout, stderr)
 	case "--version":
 		fmt.Fprintf(stdout, "collate %s\n", version)
 		return 0
@@ -40,4 +42,5 @@ func rootUsage(output io.Writer) {
 	fmt.Fprintln(output, "  --version  print the collate version")
 	fmt.Fprintln(output, "\ncommands:")
 	fmt.Fprintln(output, "  merge    rebuild a duplex PDF from front and back simplex scans")
+	fmt.Fprintln(output, "  scanner  manage scanners")
 }
