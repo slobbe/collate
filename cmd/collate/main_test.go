@@ -61,19 +61,23 @@ func TestRunRejectsPositionalArguments(t *testing.T) {
 	}
 }
 
-func TestRunAcceptsNewFlagsWithBackOrder(t *testing.T) {
-	code, _, stderr := runCommand([]string{
-		"-f", "front.txt",
-		"-b", "back.pdf",
-		"-o", "output.pdf",
-		"-back-order=forward",
-	})
+func TestRunAcceptsBackOrderAliases(t *testing.T) {
+	for _, flag := range []string{"-bo=forward", "--backorder=forward"} {
+		t.Run(flag, func(t *testing.T) {
+			code, _, stderr := runCommand([]string{
+				"-f", "front.txt",
+				"-b", "back.pdf",
+				"-o", "output.pdf",
+				flag,
+			})
 
-	if code != 2 {
-		t.Fatalf("run() exit code = %d, want 2", code)
-	}
-	if !strings.Contains(stderr, `error: normalize path "front.txt": expected a .pdf file`) {
-		t.Fatalf("stderr = %q, want front path validation error", stderr)
+			if code != 2 {
+				t.Fatalf("run() exit code = %d, want 2", code)
+			}
+			if !strings.Contains(stderr, `error: normalize path "front.txt": expected a .pdf file`) {
+				t.Fatalf("stderr = %q, want front path validation error", stderr)
+			}
+		})
 	}
 }
 
@@ -82,7 +86,7 @@ func TestRunRejectsInvalidBackOrder(t *testing.T) {
 		"-f", "front.pdf",
 		"-b", "back.pdf",
 		"-o", "output.pdf",
-		"-back-order=sideways",
+		"--backorder=sideways",
 	})
 
 	if code != 2 {

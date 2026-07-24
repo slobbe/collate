@@ -21,10 +21,18 @@ func run(args []string, stdout, stderr io.Writer) int {
 	frontFlag := flags.String("f", "", "path to front PDF")
 	backFlag := flags.String("b", "", "path to back PDF")
 	outputFlag := flags.String("o", "", "path for output PDF")
-	backOrderFlag := flags.String(
-		"back-order",
+	var backOrderValue string
+	flags.StringVar(
+		&backOrderValue,
+		"bo",
 		string(collate.BackOrderReverse),
-		"order of pages in back.pdf: reverse or forward",
+		"page order of back PDF relative to front PDF: reverse or forward",
+	)
+	flags.StringVar(
+		&backOrderValue,
+		"backorder",
+		string(collate.BackOrderReverse),
+		"page order of back PDF relative to front PDF: reverse or forward",
 	)
 	flags.Usage = func() {
 		fmt.Fprintf(flags.Output(), "usage: %s -f <front.pdf> -b <back.pdf> -o <output.pdf> [flags]\n", flags.Name())
@@ -60,7 +68,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	backOrder, err := collate.ParseBackOrder(*backOrderFlag)
+	backOrder, err := collate.ParseBackOrder(backOrderValue)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		flags.Usage()
