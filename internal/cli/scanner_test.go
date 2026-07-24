@@ -18,6 +18,18 @@ func (scanner testScanner) Info() scanner.Info {
 	return scanner.info
 }
 
+func (testScanner) Scan(context.Context, scanner.ScanOptions) error {
+	return nil
+}
+
+func (testScanner) Save(context.Context, string) error {
+	return nil
+}
+
+func (testScanner) Close() error {
+	return nil
+}
+
 func TestRunScannerListListsAvailableScanners(t *testing.T) {
 	code, stdout, stderr := runScannerListCommand(nil, func(context.Context) ([]scanner.Scanner, error) {
 		return []scanner.Scanner{

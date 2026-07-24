@@ -33,6 +33,35 @@ func New() (Document, error) {
 	return &document{ctx: ctx}, nil
 }
 
+// ImportImages writes images to a PDF in the given order.
+func ImportImages(images []string, outputPath string) error {
+	return importImages(images, outputPath, core.DefaultImportConfig())
+}
+
+// ImportImagesA4 writes images to A4-sized PDF pages in the given order.
+func ImportImagesA4(images []string, outputPath string) error {
+	config := core.DefaultImportConfig()
+	config.PageDim = types.PaperSize["A4"]
+	config.UserDim = true
+	config.Pos = types.Center
+	config.Scale = 1
+	return importImages(images, outputPath, config)
+}
+
+func importImages(images []string, outputPath string, config *core.Import) error {
+	if len(images) == 0 {
+		return fmt.Errorf("at least one image is required")
+	}
+
+	for index, imagePath := range images {
+		if err := api.ImportImagesFile([]string{imagePath}, outputPath, config, nil); err != nil {
+			return fmt.Errorf("import image %d: %w", index+1, err)
+		}
+	}
+
+	return nil
+}
+
 type document struct {
 	ctx *model.Context
 }

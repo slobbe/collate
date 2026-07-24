@@ -9,6 +9,7 @@ import (
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	core "github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
 )
 
 func TestOpenAndNewCopyPagesInRequestedOrder(t *testing.T) {
@@ -63,6 +64,60 @@ func TestOpenAndNewCopyPagesInRequestedOrder(t *testing.T) {
 	}
 
 	if got, want := pageDimensions(t, outputPath), []image.Point{{X: 101, Y: 102}, {X: 203, Y: 204}, {X: 103, Y: 104}, {X: 201, Y: 202}}; !equalPoints(got, want) {
+		t.Fatalf("page dimensions = %v, want %v", got, want)
+	}
+}
+
+func TestImportImages(t *testing.T) {
+	dir := t.TempDir()
+	createImagePDF(t, dir, "source.pdf", []image.Point{{X: 101, Y: 102}, {X: 103, Y: 104}})
+
+	temporaryOutput, err := os.CreateTemp(dir, "output-*.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outputPath := temporaryOutput.Name()
+	if err := temporaryOutput.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(outputPath); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ImportImages([]string{
+		filepath.Join(dir, "source.pdf0.png"),
+		filepath.Join(dir, "source.pdf1.png"),
+	}, outputPath); err != nil {
+		t.Fatal(err)
+	}
+
+	document, err := Open(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := document.PageCount(), 2; got != want {
+		t.Fatalf("page count = %d, want %d", got, want)
+	}
+}
+
+func TestImportImagesA4(t *testing.T) {
+	dir := t.TempDir()
+	createImagePDF(t, dir, "source.pdf", []image.Point{{X: 101, Y: 102}, {X: 103, Y: 104}})
+	outputPath := filepath.Join(dir, "output.pdf")
+
+	if err := ImportImagesA4([]string{
+		filepath.Join(dir, "source.pdf0.png"),
+		filepath.Join(dir, "source.pdf1.png"),
+	}, outputPath); err != nil {
+		t.Fatal(err)
+	}
+
+	a4 := types.PaperSize["A4"]
+	want := []image.Point{
+		{X: int(a4.Width), Y: int(a4.Height)},
+		{X: int(a4.Width), Y: int(a4.Height)},
+	}
+	if got := pageDimensions(t, outputPath); !equalPoints(got, want) {
 		t.Fatalf("page dimensions = %v, want %v", got, want)
 	}
 }
