@@ -10,6 +10,8 @@ import (
 	"github.com/slobbe/collate/internal/utils"
 )
 
+var version = "dev"
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
@@ -23,6 +25,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "merge":
 		return runMerge(args[1:], stdout, stderr)
+	case "--version":
+		fmt.Fprintf(stdout, "collate %s\n", version)
+		return 0
 	case "-h", "--help", "help":
 		rootUsage(stdout)
 		return 0
@@ -35,6 +40,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 func rootUsage(output io.Writer) {
 	fmt.Fprintln(output, "usage: collate <command> [flags]")
+	fmt.Fprintln(output, "\nflags:")
+	fmt.Fprintln(output, "  --version  print the collate version")
 	fmt.Fprintln(output, "\ncommands:")
 	fmt.Fprintln(output, "  merge    rebuild a duplex PDF from front and back simplex scans")
 }

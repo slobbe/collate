@@ -141,6 +141,21 @@ func TestRunRootUsage(t *testing.T) {
 	}
 }
 
+func TestRunVersion(t *testing.T) {
+	code, stdout, stderr := runRootCommand([]string{"--version"})
+
+	if code != 0 {
+		t.Fatalf("run() exit code = %d, want 0", code)
+	}
+	const want = "collate dev\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
 func runCommand(args []string) (int, string, string) {
 	return runRootCommand(append([]string{"merge"}, args...))
 }
