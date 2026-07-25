@@ -17,7 +17,7 @@ func main() {
 		stop()
 	}()
 
-	exitCode := cli.Run(ctx, os.Args[1:], os.Stdout, os.Stderr, version)
+	exitCode := cli.Run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, version)
 	stop()
 	os.Exit(exitCode)
 }

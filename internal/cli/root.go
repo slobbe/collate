@@ -7,7 +7,7 @@ import (
 )
 
 // Run executes a collate command and returns its process exit code.
-func Run(ctx context.Context, args []string, stdout, stderr io.Writer, version string) int {
+func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, version string) int {
 	if err := ctx.Err(); err != nil {
 		fmt.Fprintln(stderr, "interrupted")
 		return 130
@@ -22,7 +22,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, version s
 	case "merge":
 		return RunMerge(ctx, args[1:], stdout, stderr)
 	case "scan":
-		return RunScan(ctx, args[1:], stdout, stderr)
+		return RunScan(ctx, args[1:], stdin, stdout, stderr)
 	case "--version":
 		fmt.Fprintf(stdout, "collate %s\n", version)
 		return 0
