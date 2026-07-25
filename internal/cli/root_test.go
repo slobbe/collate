@@ -77,6 +77,6 @@ func runRootCommand(args []string) (int, string, string) {
 
 func runRootCommandWithContext(ctx context.Context, args []string) (int, string, string) {
 	var stdout, stderr bytes.Buffer
-	code := Run(ctx, args, &stdout, &stderr, "dev")
+	code := Run(ctx, args, strings.NewReader(""), &stdout, &stderr, "dev")
 	return code, stdout.String(), stderr.String()
 }

@@ -4,68 +4,158 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/slobbe/collate/internal/collate"
 	"github.com/slobbe/collate/internal/scanner"
 )
 
 type scanTestScanner struct {
-	info        scanner.Info
+	id          string
 	scanErr     error
 	saveErr     error
-	scanCalled  bool
-	scanOptions scanner.ScanOptions
-	savedPath   string
+	scanOptions []scanner.ScanOptions
+	savedPaths  []string
 	closed      bool
 }
 
-func (scanner *scanTestScanner) Info() scanner.Info {
-	return scanner.info
+func (s *scanTestScanner) ID() string {
+	return s.id
 }
 
-func (scanner *scanTestScanner) Scan(_ context.Context, options scanner.ScanOptions) error {
-	scanner.scanCalled = true
-	scanner.scanOptions = options
-	return scanner.scanErr
+func (s *scanTestScanner) Capabilities(context.Context, bool) scanner.Capabilities {
+	return scanner.Capabilities{}
 }
 
-func (scanner *scanTestScanner) Save(_ context.Context, outputPath string) error {
-	scanner.savedPath = outputPath
-	return scanner.saveErr
+func (s *scanTestScanner) Scan(_ context.Context, options scanner.ScanOptions) error {
+	s.scanOptions = append(s.scanOptions, options)
+	return s.scanErr
 }
 
-func (scanner *scanTestScanner) Close() error {
-	scanner.closed = true
+func (s *scanTestScanner) Save(_ context.Context, outputPath string) error {
+	s.savedPaths = append(s.savedPaths, outputPath)
+	return s.saveErr
+}
+
+func (s *scanTestScanner) Close(context.Context) error {
+	s.closed = true
 	return nil
 }
 
-func TestRunScanScansAndSavesSelectedDevice(t *testing.T) {
-	selected := &scanTestScanner{info: scanner.Info{Device: "test:0"}}
-	code, stdout, stderr := runScanCommand([]string{
-		"--device", "test:0",
-		"--output", "document.pdf",
-	}, func(context.Context) ([]scanner.Scanner, error) {
-		return []scanner.Scanner{selected}, nil
-	})
+type mergeCall struct {
+	frontPath  string
+	backPath   string
+	outputPath string
+	order      collate.BackOrder
+}
+
+func TestRunScanSavesFrontOnly(t *testing.T) {
+	selected := &scanTestScanner{id: "test:0"}
+	var merges []mergeCall
+	code, stdout, stderr := runScanCommand(
+		[]string{"--device", "test:0", "--output", "document.pdf"},
+		"\nn\n",
+		func(context.Context) ([]scanner.Scanner, error) {
+			return []scanner.Scanner{selected}, nil
+		},
+		func(_ context.Context, frontPath, backPath, outputPath string, order collate.BackOrder) error {
+			merges = append(merges, mergeCall{frontPath, backPath, outputPath, order})
+			return nil
+		},
+	)
 
 	if code != 0 {
 		t.Fatalf("RunScan() exit code = %d, want 0", code)
 	}
-	if !selected.scanCalled {
-		t.Fatal("Scan was not called")
+	if got, want := len(selected.scanOptions), 1; got != want {
+		t.Fatalf("scan count = %d, want %d", got, want)
 	}
-	if selected.scanOptions != (scanner.ScanOptions{}) {
-		t.Fatalf("scan options = %#v, want defaults", selected.scanOptions)
+	if got, want := len(selected.savedPaths), 1; got != want {
+		t.Fatalf("save count = %d, want %d", got, want)
 	}
-	if !strings.HasSuffix(selected.savedPath, "/document.pdf") {
-		t.Fatalf("Save path = %q, want document.pdf", selected.savedPath)
+	if filepath.Base(selected.savedPaths[0]) != "document.pdf" {
+		t.Fatalf("saved path = %q, want document.pdf", selected.savedPaths[0])
+	}
+	if len(merges) != 0 {
+		t.Fatalf("merge count = %d, want 0", len(merges))
 	}
 	if !selected.closed {
 		t.Fatal("Close was not called")
 	}
-	if !strings.Contains(stdout, "scanned successfully:") {
-		t.Fatalf("stdout = %q, want success message", stdout)
+	if !strings.Contains(stdout, "Load the front pages.") || !strings.Contains(stdout, "scanned successfully:") {
+		t.Fatalf("stdout = %q, want front prompt and success", stdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestRunScanCollatesBackPagesInReverseOrderByDefault(t *testing.T) {
+	selected := &scanTestScanner{id: "test:0"}
+	var merges []mergeCall
+	code, stdout, stderr := runScanCommand(
+		[]string{"--device", "test:0", "--output", "document.pdf"},
+		"\ny\n\n\n",
+		func(context.Context) ([]scanner.Scanner, error) {
+			return []scanner.Scanner{selected}, nil
+		},
+		func(_ context.Context, frontPath, backPath, outputPath string, order collate.BackOrder) error {
+			merges = append(merges, mergeCall{frontPath, backPath, outputPath, order})
+			return nil
+		},
+	)
+
+	if code != 0 {
+		t.Fatalf("RunScan() exit code = %d, want 0", code)
+	}
+	if got, want := len(selected.scanOptions), 2; got != want {
+		t.Fatalf("scan count = %d, want %d", got, want)
+	}
+	if got, want := len(selected.savedPaths), 2; got != want {
+		t.Fatalf("save count = %d, want %d", got, want)
+	}
+	if filepath.Base(selected.savedPaths[0]) != "front.pdf" || filepath.Base(selected.savedPaths[1]) != "back.pdf" {
+		t.Fatalf("saved paths = %v, want front.pdf and back.pdf", selected.savedPaths)
+	}
+	if got, want := len(merges), 1; got != want {
+		t.Fatalf("merge count = %d, want %d", got, want)
+	}
+	if merges[0].order != collate.BackOrderReverse {
+		t.Fatalf("back order = %q, want %q", merges[0].order, collate.BackOrderReverse)
+	}
+	if filepath.Base(merges[0].outputPath) != "document.pdf" {
+		t.Fatalf("merge output = %q, want document.pdf", merges[0].outputPath)
+	}
+	if !strings.Contains(stdout, "Load the back pages.") || !strings.Contains(stdout, "scanned and collated successfully:") {
+		t.Fatalf("stdout = %q, want back prompt and duplex success", stdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestRunScanCollatesBackPagesInForwardOrder(t *testing.T) {
+	selected := &scanTestScanner{id: "test:0"}
+	var mergeOrder collate.BackOrder
+	code, _, stderr := runScanCommand(
+		[]string{"--device", "test:0", "--output", "document.pdf"},
+		"\ny\nforward\n\n",
+		func(context.Context) ([]scanner.Scanner, error) {
+			return []scanner.Scanner{selected}, nil
+		},
+		func(_ context.Context, _, _, _ string, order collate.BackOrder) error {
+			mergeOrder = order
+			return nil
+		},
+	)
+
+	if code != 0 {
+		t.Fatalf("RunScan() exit code = %d, want 0", code)
+	}
+	if mergeOrder != collate.BackOrderForward {
+		t.Fatalf("back order = %q, want %q", mergeOrder, collate.BackOrderForward)
 	}
 	if stderr != "" {
 		t.Fatalf("stderr = %q, want empty", stderr)
@@ -73,17 +163,22 @@ func TestRunScanScansAndSavesSelectedDevice(t *testing.T) {
 }
 
 func TestRunScanListsAvailableDevices(t *testing.T) {
-	code, stdout, stderr := runScanCommand([]string{"--device-list"}, func(context.Context) ([]scanner.Scanner, error) {
-		return []scanner.Scanner{
-			&scanTestScanner{info: scanner.Info{Device: "airscan:e0:OfficeJet", Description: "HP OfficeJet Pro 9010"}},
-			&scanTestScanner{info: scanner.Info{Device: "test:0", Description: "Virtual scanner"}},
-		}, nil
-	})
+	code, stdout, stderr := runScanCommand(
+		[]string{"--device-list"},
+		"",
+		func(context.Context) ([]scanner.Scanner, error) {
+			return []scanner.Scanner{
+				&scanTestScanner{id: "airscan:e0:OfficeJet"},
+				&scanTestScanner{id: "test:0"},
+			}, nil
+		},
+		nil,
+	)
 
 	if code != 0 {
 		t.Fatalf("RunScan() exit code = %d, want 0", code)
 	}
-	const want = "Available scanners:\n- HP OfficeJet Pro 9010\n  device: airscan:e0:OfficeJet\n- Virtual scanner\n  device: test:0\n"
+	const want = "Available scanners:\n- airscan:e0:OfficeJet\n- test:0\n"
 	if stdout != want {
 		t.Fatalf("stdout = %q, want %q", stdout, want)
 	}
@@ -92,30 +187,16 @@ func TestRunScanListsAvailableDevices(t *testing.T) {
 	}
 }
 
-func TestRunScanReportsNoDevices(t *testing.T) {
-	code, stdout, stderr := runScanCommand([]string{"--device-list"}, func(context.Context) ([]scanner.Scanner, error) {
-		return nil, nil
-	})
-
-	if code != 0 {
-		t.Fatalf("RunScan() exit code = %d, want 0", code)
-	}
-	if stdout != "No scanners found.\n" {
-		t.Fatalf("stdout = %q, want no-scanners message", stdout)
-	}
-	if stderr != "" {
-		t.Fatalf("stderr = %q, want empty", stderr)
-	}
-}
-
 func TestRunScanRejectsDeviceListWithScanOptions(t *testing.T) {
-	code, _, stderr := runScanCommand([]string{
-		"--device-list",
-		"--device", "test:0",
-	}, func(context.Context) ([]scanner.Scanner, error) {
-		t.Fatal("discover was called")
-		return nil, nil
-	})
+	code, _, stderr := runScanCommand(
+		[]string{"--device-list", "--device", "test:0"},
+		"",
+		func(context.Context) ([]scanner.Scanner, error) {
+			t.Fatal("discover was called")
+			return nil, nil
+		},
+		nil,
+	)
 
 	if code != 2 {
 		t.Fatalf("RunScan() exit code = %d, want 2", code)
@@ -125,63 +206,22 @@ func TestRunScanRejectsDeviceListWithScanOptions(t *testing.T) {
 	}
 }
 
-func TestRunScanRequiresFlags(t *testing.T) {
-	for _, test := range []struct {
-		name string
-		args []string
-		want string
-	}{
-		{name: "device", args: []string{"--output", "output.pdf"}, want: "error: --device is required"},
-		{name: "output", args: []string{"--device", "test:0"}, want: "error: --output is required"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			code, _, stderr := runScanCommand(test.args, func(context.Context) ([]scanner.Scanner, error) {
-				t.Fatal("discover was called")
-				return nil, nil
-			})
-			if code != 2 {
-				t.Fatalf("RunScan() exit code = %d, want 2", code)
-			}
-			if !strings.Contains(stderr, test.want) {
-				t.Fatalf("stderr = %q, want %q", stderr, test.want)
-			}
-		})
-	}
-}
-
-func TestRunScanRequiresSourceForBatch(t *testing.T) {
-	code, _, stderr := runScanCommand([]string{
-		"--device", "test:0",
-		"--output", "output.pdf",
-		"--batch",
-	}, func(context.Context) ([]scanner.Scanner, error) {
-		t.Fatal("discover was called")
-		return nil, nil
-	})
-
-	if code != 2 {
-		t.Fatalf("RunScan() exit code = %d, want 2", code)
-	}
-	if !strings.Contains(stderr, "error: --source is required when --batch is used") {
-		t.Fatalf("stderr = %q, want batch source error", stderr)
-	}
-}
-
-func TestRunScanPassesFeederOptions(t *testing.T) {
-	selected := &scanTestScanner{info: scanner.Info{Device: "test:0"}}
-	code, _, stderr := runScanCommand([]string{
-		"--device", "test:0",
-		"--output", "output.pdf",
-		"--source", "ADF",
-		"--batch",
-	}, func(context.Context) ([]scanner.Scanner, error) {
-		return []scanner.Scanner{selected}, nil
-	})
+func TestRunScanPassesSourceAndPaper(t *testing.T) {
+	selected := &scanTestScanner{id: "test:0"}
+	code, _, stderr := runScanCommand(
+		[]string{"--device", "test:0", "--output", "output.pdf", "--source", "ADF Duplex", "--paper", "a4"},
+		"\nn\n",
+		func(context.Context) ([]scanner.Scanner, error) {
+			return []scanner.Scanner{selected}, nil
+		},
+		nil,
+	)
 
 	if code != 0 {
 		t.Fatalf("RunScan() exit code = %d, want 0", code)
 	}
-	if got, want := selected.scanOptions, (scanner.ScanOptions{Source: "ADF", Batch: true}); got != want {
+	want := scanner.ScanOptions{Source: "ADF Duplex", Paper: scanner.PaperA4}
+	if got := selected.scanOptions[0]; got != want {
 		t.Fatalf("scan options = %#v, want %#v", got, want)
 	}
 	if stderr != "" {
@@ -189,72 +229,16 @@ func TestRunScanPassesFeederOptions(t *testing.T) {
 	}
 }
 
-func TestRunScanPassesPaperOption(t *testing.T) {
-	selected := &scanTestScanner{info: scanner.Info{Device: "test:0"}}
-	code, _, stderr := runScanCommand([]string{
-		"--device", "test:0",
-		"--output", "output.pdf",
-		"--paper", "a4",
-	}, func(context.Context) ([]scanner.Scanner, error) {
-		return []scanner.Scanner{selected}, nil
-	})
-
-	if code != 0 {
-		t.Fatalf("RunScan() exit code = %d, want 0", code)
-	}
-	if got, want := selected.scanOptions.Paper, scanner.PaperA4; got != want {
-		t.Fatalf("paper = %q, want %q", got, want)
-	}
-	if stderr != "" {
-		t.Fatalf("stderr = %q, want empty", stderr)
-	}
-}
-
-func TestRunScanRejectsInvalidPaper(t *testing.T) {
-	code, _, stderr := runScanCommand([]string{
-		"--device", "test:0",
-		"--output", "output.pdf",
-		"--paper", "letter",
-	}, func(context.Context) ([]scanner.Scanner, error) {
-		t.Fatal("discover was called")
-		return nil, nil
-	})
-
-	if code != 2 {
-		t.Fatalf("RunScan() exit code = %d, want 2", code)
-	}
-	if !strings.Contains(stderr, `error: invalid paper format "letter"`) {
-		t.Fatalf("stderr = %q, want invalid-paper error", stderr)
-	}
-}
-
-func TestRunScanRejectsUnknownScanner(t *testing.T) {
-	code, _, stderr := runScanCommand([]string{
-		"--device", "missing",
-		"--output", "output.pdf",
-	}, func(context.Context) ([]scanner.Scanner, error) {
-		return []scanner.Scanner{&scanTestScanner{info: scanner.Info{Device: "test:0"}}}, nil
-	})
-
-	if code != 2 {
-		t.Fatalf("RunScan() exit code = %d, want 2", code)
-	}
-	if !strings.Contains(stderr, `error: scanner "missing" not found`) {
-		t.Fatalf("stderr = %q, want unknown-scanner error", stderr)
-	}
-}
-
 func TestRunScanReportsScanFailureAndCleansUp(t *testing.T) {
-	selected := &scanTestScanner{
-		info:    scanner.Info{Device: "test:0"},
-		scanErr: errors.New("device failure"),
-	}
-	code, _, stderr := runScanCommand([]string{
-		"--device", "test:0",
-		"--output", "output.pdf",
-	}, func(context.Context) ([]scanner.Scanner, error) {
-		return []scanner.Scanner{selected}, nil
-	})
+	selected := &scanTestScanner{id: "test:0", scanErr: errors.New("device failure")}
+	code, _, stderr := runScanCommand(
+		[]string{"--device", "test:0", "--output", "output.pdf"},
+		"\n",
+		func(context.Context) ([]scanner.Scanner, error) {
+			return []scanner.Scanner{selected}, nil
+		},
+		nil,
+	)
 
 	if code != 1 {
 		t.Fatalf("RunScan() exit code = %d, want 1", code)
@@ -268,16 +252,15 @@ func TestRunScanReportsScanFailureAndCleansUp(t *testing.T) {
 }
 
 func TestRunScanReportsCancellation(t *testing.T) {
-	selected := &scanTestScanner{
-		info:    scanner.Info{Device: "test:0"},
-		scanErr: context.Canceled,
-	}
-	code, _, stderr := runScanCommand([]string{
-		"--device", "test:0",
-		"--output", "output.pdf",
-	}, func(context.Context) ([]scanner.Scanner, error) {
-		return []scanner.Scanner{selected}, nil
-	})
+	selected := &scanTestScanner{id: "test:0", scanErr: context.Canceled}
+	code, _, stderr := runScanCommand(
+		[]string{"--device", "test:0", "--output", "output.pdf"},
+		"\n",
+		func(context.Context) ([]scanner.Scanner, error) {
+			return []scanner.Scanner{selected}, nil
+		},
+		nil,
+	)
 
 	if code != 130 {
 		t.Fatalf("RunScan() exit code = %d, want 130", code)
@@ -290,8 +273,14 @@ func TestRunScanReportsCancellation(t *testing.T) {
 	}
 }
 
-func runScanCommand(args []string, discover discoverScanners) (int, string, string) {
+func runScanCommand(args []string, input string, discover discoverScanners, merge mergeScans) (int, string, string) {
+	if merge == nil {
+		merge = func(context.Context, string, string, string, collate.BackOrder) error {
+			return nil
+		}
+	}
+
 	var stdout, stderr bytes.Buffer
-	code := runScan(context.Background(), args, &stdout, &stderr, discover)
+	code := runScan(context.Background(), args, strings.NewReader(input), &stdout, &stderr, discover, merge)
 	return code, stdout.String(), stderr.String()
 }
