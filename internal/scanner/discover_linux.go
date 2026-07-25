@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-func DiscoverLinux(ctx context.Context) ([]Scanner, error) {
+func Discover(ctx context.Context) ([]Scanner, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -38,7 +38,7 @@ func DiscoverLinux(ctx context.Context) ([]Scanner, error) {
 			continue
 		}
 
-		scanners = append(scanners, NewLinuxScanner(deviceID))
+		scanners = append(scanners, NewScanner(deviceID))
 	}
 
 	return scanners, nil

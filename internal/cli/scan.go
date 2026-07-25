@@ -21,7 +21,7 @@ type mergeScans func(context.Context, string, string, string, collate.BackOrder)
 
 // RunScan acquires front and optional back pages from a scanner and saves a PDF.
 func RunScan(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	return runScan(ctx, args, stdin, stdout, stderr, scanner.DiscoverLinux, collate.Collate)
+	return runScan(ctx, args, stdin, stdout, stderr, scanner.Discover, collate.Collate)
 }
 
 func runScan(
