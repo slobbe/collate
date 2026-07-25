@@ -23,7 +23,7 @@ type LinuxScanner struct {
 	capabilities *Capabilities
 }
 
-func NewLinuxScanner(deviceID string) *LinuxScanner {
+func NewScanner(deviceID string) *LinuxScanner {
 	deviceID = strings.TrimSpace(deviceID)
 
 	if deviceID == "" {
