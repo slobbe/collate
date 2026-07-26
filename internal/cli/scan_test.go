@@ -156,6 +156,65 @@ func TestRunScanLetsUserSelectScannerAndOptions(t *testing.T) {
 	}
 }
 
+func TestRunScanFlagsSkipScannerOptionAndOutputPrompts(t *testing.T) {
+	selected := &scanTestScanner{info: scanner.Info{ID: "scanner-2", Name: "Scanner Two"}}
+	outputPath := filepath.Join(t.TempDir(), "flagged.pdf")
+
+	code, stdout, stderr := runScanCommand(
+		[]string{
+			"--device", "scanner-2",
+			"--source", "adf",
+			"--paper", "letter",
+			"--mode", "gray",
+			"--resolution", "600",
+			"--output", outputPath,
+		},
+		"\nn\n",
+		startFor(selected),
+		func(context.Context) ([]scanner.Info, error) {
+			return []scanner.Info{{ID: "scanner-1", Name: "Scanner One"}, selected.info}, nil
+		},
+		capabilitiesFor(testCapabilities),
+	)
+
+	if code != 0 {
+		t.Fatalf("RunScan() exit code = %d, want 0; stderr = %q", code, stderr)
+	}
+	want := scanner.ScanOptions{Source: "ADF Simplex", Paper: scanner.PaperLetter, Mode: "Grayscale8", Resolution: 600}
+	if got := selected.scanOptions[0]; got != want {
+		t.Fatalf("scan options = %#v, want %#v", got, want)
+	}
+	for _, prompt := range []string{"Available scanners:", "Available sources:", "Paper [", "Available color modes:", "Available resolutions:", "Output path ["} {
+		if strings.Contains(stdout, prompt) {
+			t.Fatalf("stdout contains skipped prompt %q: %q", prompt, stdout)
+		}
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestRunScanFlagRejectsUnsupportedResolution(t *testing.T) {
+	selected := &scanTestScanner{info: scanner.Info{ID: "scanner-1"}}
+	code, _, stderr := runScanCommand(
+		[]string{"--source", "platen", "--paper", "a4", "--mode", "RGB24", "--resolution", "1200"},
+		"",
+		startFor(selected),
+		func(context.Context) ([]scanner.Info, error) { return []scanner.Info{selected.info}, nil },
+		capabilitiesFor(testCapabilities),
+	)
+
+	if code != 1 {
+		t.Fatalf("RunScan() exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr, `source "Platen" does not support 1200 DPI`) {
+		t.Fatalf("stderr = %q", stderr)
+	}
+	if len(selected.scanOptions) != 0 {
+		t.Fatal("scan started with unsupported resolution")
+	}
+}
+
 func TestRunScanCollatesBackPagesBeforeAskingForOutput(t *testing.T) {
 	dir := t.TempDir()
 	front := &scanTestResult{documentPath: createTestPDF(t, dir, "front.pdf")}

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/slobbe/collate/internal/scanner"
-	escl "github.com/slobbe/collate/internal/scanner/eSCL"
+	"github.com/slobbe/collate/internal/scanner/escl"
 )
 
 func TestDiscoverScannersMapsESCLDevicesToScannerInfo(t *testing.T) {

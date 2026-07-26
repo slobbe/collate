@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 
 	"github.com/slobbe/collate/internal/scanner"
 )
@@ -66,14 +67,16 @@ type resolutionXML struct {
 	Y int `xml:"YResolution"`
 }
 
-func RequestCapabilities(ctx context.Context, client *http.Client, baseURL string) (scanner.Capabilities, error) {
+func requestCapabilities(ctx context.Context, client *http.Client, baseURL *url.URL) (scanner.Capabilities, error) {
 	if err := ctx.Err(); err != nil {
 		return scanner.Capabilities{}, err
 	}
 
-	endpoint := baseURL + "/ScannerCapabilities"
+	if baseURL == nil {
+		return scanner.Capabilities{}, fmt.Errorf("scanner URL is required")
+	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL.JoinPath("ScannerCapabilities").String(), nil)
 	if err != nil {
 		return scanner.Capabilities{}, err
 	}
@@ -128,10 +131,10 @@ func mapCapabilities(document scannerCapabilitiesXML) scanner.Capabilities {
 			Feeder: feeder,
 			Duplex: duplex,
 		}
-		source.Dimensions.MinWidth = ToMicrometres(input.MinWidth)
-		source.Dimensions.MinHeight = ToMicrometres(input.MinHeight)
-		source.Dimensions.MaxWidth = ToMicrometres(input.MaxWidth)
-		source.Dimensions.MaxHeight = ToMicrometres(input.MaxHeight)
+		source.Dimensions.MinWidth = toMicrometres(input.MinWidth)
+		source.Dimensions.MinHeight = toMicrometres(input.MinHeight)
+		source.Dimensions.MaxWidth = toMicrometres(input.MaxWidth)
+		source.Dimensions.MaxHeight = toMicrometres(input.MaxHeight)
 
 		seenModes := map[string]bool{}
 		seenResolutions := map[int]bool{}
