@@ -14,31 +14,19 @@ collate merge [flags] -f <front.pdf> -b <back.pdf> -o <output.pdf>
 collate merge -f front.pdf -b back.pdf -o output.pdf --backorder=forward
 ```
 
-List scanners available to collate:
+Start an interactive scan:
+
+```sh
+collate scan
+```
+
+Collate discovers eSCL scanners on the local network, lets you select a device when more than one is available, then prompts for the source, paper format, color mode, and resolution. It scans the front pages first and can then scan and collate the back pages. The output path defaults to `scan_<timestamp>.pdf`.
+
+To only list discovered scanners:
 
 ```sh
 collate scan --device-list
 ```
-
-Scan one page from a listed scanner into a PDF:
-
-```sh
-collate scan --device 'airscan:e0:OfficeJet' --output document.pdf
-```
-
-Force DIN A4 scan geometry and A4-sized PDF pages:
-
-```sh
-collate scan --device 'airscan:e0:OfficeJet' --paper a4 --output document.pdf
-```
-
-Scan all pages loaded in a feeder by naming its source and opting into batch mode:
-
-```sh
-collate scan --device 'airscan:e0:OfficeJet' --source ADF --batch --paper a4 --output document.pdf
-```
-
-The exact feeder source name is device-specific; inspect it with `scanimage --device-name '<device>' --help`. The only supported paper format is currently `a4`. On Linux, scanner discovery and scanning use SANE's `scanimage` command, commonly provided by the `sane-utils` package. Device visibility may also depend on SANE backend support, device permissions, udev rules, or network configuration.
 
 ## Install
 

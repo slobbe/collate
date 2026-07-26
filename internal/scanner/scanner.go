@@ -1,60 +1,81 @@
 package scanner
 
-import (
-	"context"
-	"fmt"
-	"strings"
-)
+import "context"
 
+// Info identifies a scanner and provides its user-facing name.
+type Info struct {
+	ID   string
+	Name string
+}
+
+// Scanner acquires scans from a physical or network device.
 type Scanner interface {
-	ID() string
-	Capabilities(ctx context.Context, force bool) Capabilities
-	Scan(ctx context.Context, options ScanOptions) error
-	Save(ctx context.Context, path string) error
-	Close(ctx context.Context) error
+	Info() Info
+	Capabilities(ctx context.Context) (Capabilities, error)
+	Scan(ctx context.Context, options ScanOptions) (ScanResult, error)
+}
+
+// ScanResult owns the files produced by a single scan operation.
+type ScanResult interface {
+	SavePDF(ctx context.Context, path string) error
+	Close() error
 }
 
 type Capabilities struct {
-	Sources     []Source
-	Papers      []Paper
-	Modes       []Mode
-	Resolutions []int
+	Sources []Source
+}
+
+// Source is a scanner-specific input source.
+type Source struct {
+	ID     string
+	Name   string
+	Feeder bool
+	Duplex bool
+
+	ColorModes  []string
+	Resolutions []int // DPI
+	Dimensions  struct {
+		MinWidth  int // micrometres
+		MinHeight int // micrometres
+		MaxWidth  int // micrometres
+		MaxHeight int // micrometres
+	}
 }
 
 type ScanOptions struct {
-	Source     Source
+	Source     string
+	Mode       string
 	Paper      Paper
-	Mode       Mode
 	Resolution int // DPI
 }
 
-// Source is an exact source value accepted by a scanner backend.
-type Source string
+type Paper struct {
+	ID   string
+	Name string
 
-type Paper string
-
-const (
-	PaperA4     Paper = "a4"
-	PaperA5     Paper = "a5"
-	PaperLetter Paper = "letter"
-)
-
-type Mode string
-
-const (
-	ModeColor Mode = "color"
-	ModeGray  Mode = "gray"
-)
-
-func ParsePaper(value string) (Paper, error) {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "a4", "din-a4":
-		return PaperA4, nil
-	case "a5", "din-a5":
-		return PaperA5, nil
-	case "letter":
-		return PaperLetter, nil
-	default:
-		return "", fmt.Errorf("invalid paper format %q (must be %q)", value, PaperA4)
-	}
+	WidthMicrometres  int
+	HeightMicrometres int
 }
+
+var (
+	PaperA4 = Paper{
+		ID:                "a4",
+		Name:              "A4",
+		WidthMicrometres:  210_000,
+		HeightMicrometres: 297_000,
+	}
+
+	PaperA5 = Paper{
+		ID:                "a5",
+		Name:              "A5",
+		WidthMicrometres:  148_000,
+		HeightMicrometres: 210_000,
+	}
+
+	PaperLetter = Paper{
+		ID:                "letter",
+		Name:              "Letter",
+		WidthMicrometres:  215_900,
+		HeightMicrometres: 279_400,
+	}
+)
