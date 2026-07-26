@@ -7,21 +7,23 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/slobbe/collate/internal/collate"
 	"github.com/slobbe/collate/internal/scanner"
 	"github.com/slobbe/collate/internal/utils"
 )
 
-type discoverScanners func(context.Context) ([]scanner.Scanner, error)
-type mergeScans func(context.Context, string, string, string, collate.BackOrder) error
+type startScan func(context.Context, string, scanner.ScanOptions) (*collate.ScanSession, error)
+type discoverScannerInfos func(context.Context) ([]scanner.Info, error)
+type scannerCapabilities func(context.Context, string) (scanner.Capabilities, error)
+type clock func() time.Time
 
-// RunScan acquires front and optional back pages from a scanner and saves a PDF.
+// RunScan interactively acquires front and optional back pages from a scanner and saves a PDF.
 func RunScan(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	return runScan(ctx, args, stdin, stdout, stderr, scanner.Discover, collate.Collate)
+	return runScan(ctx, args, stdin, stdout, stderr, collate.StartScanByID, collate.DiscoverScanners, collate.ScannerCapabilities, time.Now)
 }
 
 func runScan(
@@ -29,19 +31,16 @@ func runScan(
 	args []string,
 	stdin io.Reader,
 	stdout, stderr io.Writer,
-	discover discoverScanners,
-	merge mergeScans,
+	start startScan,
+	discover discoverScannerInfos,
+	capabilitiesFor scannerCapabilities,
+	now clock,
 ) int {
 	flags := flag.NewFlagSet("collate scan", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-
-	deviceFlag := flags.String("device", "", "scanner device identifier")
-	outputFlag := flags.String("output", "", "path for scanned PDF")
-	sourceFlag := flags.String("source", "", "scanner source from scanner capabilities")
-	paperFlag := flags.String("paper", "", "paper format: a4, a5, or letter")
 	deviceListFlag := flags.Bool("device-list", false, "list available scanners")
 	flags.Usage = func() {
-		fmt.Fprintf(flags.Output(), "usage: %s --device-list | --device <device> --output <output.pdf> [--source <source>] [--paper <paper>]\n", flags.Name())
+		fmt.Fprintf(flags.Output(), "usage: %s [--device-list]\n", flags.Name())
 		flags.PrintDefaults()
 	}
 
@@ -57,117 +56,221 @@ func runScan(
 		flags.Usage()
 		return 2
 	}
-
 	if *deviceListFlag {
-		if *deviceFlag != "" || *outputFlag != "" || *sourceFlag != "" || *paperFlag != "" {
-			fmt.Fprintln(stderr, "error: --device-list cannot be combined with scan options")
-			flags.Usage()
-			return 2
-		}
 		return runDeviceList(ctx, stdout, stderr, discover)
 	}
 
-	for _, required := range []struct {
-		name  string
-		value string
-	}{
-		{name: "--device", value: *deviceFlag},
-		{name: "--output", value: *outputFlag},
-	} {
-		if required.value == "" {
-			fmt.Fprintf(stderr, "error: %s is required\n", required.name)
-			flags.Usage()
-			return 2
-		}
-	}
-
-	var paper scanner.Paper
-	if *paperFlag != "" {
-		parsedPaper, err := scanner.ParsePaper(*paperFlag)
-		if err != nil {
-			fmt.Fprintln(stderr, "error:", err)
-			flags.Usage()
-			return 2
-		}
-		paper = parsedPaper
-	}
-
-	outputPath, err := utils.NormalizePDFPath(*outputFlag)
+	input := bufio.NewReader(stdin)
+	infos, err := discover(ctx)
 	if err != nil {
-		fmt.Fprintf(stderr, "error: normalize path %q: %v\n", *outputFlag, err)
-		return 2
+		return reportScanError(stderr, err)
 	}
-
-	scanners, err := discover(ctx)
+	device, err := selectScanner(input, stdout, infos)
 	if err != nil {
 		return reportScanError(stderr, err)
 	}
 
-	selected := scannerByDevice(scanners, *deviceFlag)
-	if selected == nil {
-		fmt.Fprintf(stderr, "error: scanner %q not found; run \"collate scan --device-list\" to list available scanners\n", *deviceFlag)
-		return 2
+	capabilities, err := capabilitiesFor(ctx, device.ID)
+	if err != nil {
+		return reportScanError(stderr, err)
 	}
-	defer selected.Close(context.Background())
-
-	options := scanner.ScanOptions{
-		Source: scanner.Source(*sourceFlag),
-		Paper:  paper,
+	options, err := selectScanOptions(input, stdout, capabilities)
+	if err != nil {
+		return reportScanError(stderr, err)
 	}
-	input := bufio.NewReader(stdin)
 
 	if err := waitForScanStart(input, stdout, "Load the front pages."); err != nil {
 		return reportScanError(stderr, err)
 	}
-	if err := selected.Scan(ctx, options); err != nil {
+	session, err := start(ctx, device.ID, options)
+	if err != nil {
 		return reportScanError(stderr, err)
 	}
+	defer session.Close()
 
 	scanBack, err := promptYesNo(input, stdout, "Scan back pages too? [y/N]: ")
 	if err != nil {
 		return reportScanError(stderr, err)
 	}
-	if !scanBack {
-		if err := selected.Save(ctx, outputPath); err != nil {
+
+	backOrder := collate.BackOrderReverse
+	if scanBack {
+		backOrder, err = promptBackOrder(input, stdout)
+		if err != nil {
 			return reportScanError(stderr, err)
 		}
+		if err := waitForScanStart(input, stdout, "Load the back pages."); err != nil {
+			return reportScanError(stderr, err)
+		}
+		if err := session.ScanBack(ctx); err != nil {
+			return reportScanError(stderr, err)
+		}
+	}
+
+	outputPath, err := promptOutputPath(input, stdout, now())
+	if err != nil {
+		return reportScanError(stderr, err)
+	}
+	if scanBack {
+		err = session.Collate(ctx, outputPath, backOrder)
+	} else {
+		err = session.SaveFront(ctx, outputPath)
+	}
+	if err != nil {
+		return reportScanError(stderr, err)
+	}
+
+	if scanBack {
+		fmt.Fprintf(stdout, "scanned and collated successfully: %s\n", outputPath)
+	} else {
 		fmt.Fprintf(stdout, "scanned successfully: %s\n", outputPath)
-		return 0
 	}
-
-	backOrder, err := promptBackOrder(input, stdout)
-	if err != nil {
-		return reportScanError(stderr, err)
-	}
-
-	temporaryDir, err := os.MkdirTemp(filepath.Dir(outputPath), ".collate-duplex-")
-	if err != nil {
-		return reportScanError(stderr, fmt.Errorf("create temporary scan directory: %w", err))
-	}
-	defer os.RemoveAll(temporaryDir)
-
-	frontPath := filepath.Join(temporaryDir, "front.pdf")
-	if err := selected.Save(ctx, frontPath); err != nil {
-		return reportScanError(stderr, err)
-	}
-
-	if err := waitForScanStart(input, stdout, "Load the back pages."); err != nil {
-		return reportScanError(stderr, err)
-	}
-	if err := selected.Scan(ctx, options); err != nil {
-		return reportScanError(stderr, err)
-	}
-
-	backPath := filepath.Join(temporaryDir, "back.pdf")
-	if err := selected.Save(ctx, backPath); err != nil {
-		return reportScanError(stderr, err)
-	}
-	if err := merge(ctx, frontPath, backPath, outputPath, backOrder); err != nil {
-		return reportScanError(stderr, err)
-	}
-
-	fmt.Fprintf(stdout, "scanned and collated successfully: %s\n", outputPath)
 	return 0
+}
+
+func selectScanner(input *bufio.Reader, output io.Writer, infos []scanner.Info) (scanner.Info, error) {
+	if len(infos) == 0 {
+		return scanner.Info{}, fmt.Errorf("no scanners found")
+	}
+	if len(infos) == 1 {
+		name := scannerName(infos[0])
+		fmt.Fprintf(output, "Using scanner: %s\n", name)
+		return infos[0], nil
+	}
+
+	fmt.Fprintln(output, "Available scanners:")
+	for index, info := range infos {
+		fmt.Fprintf(output, "  %d. %s\n", index+1, scannerName(info))
+	}
+	index, err := promptIndex(input, output, "Select scanner", len(infos))
+	if err != nil {
+		return scanner.Info{}, err
+	}
+	return infos[index], nil
+}
+
+func selectScanOptions(input *bufio.Reader, output io.Writer, capabilities scanner.Capabilities) (scanner.ScanOptions, error) {
+	source, err := selectSource(input, output, capabilities.Sources)
+	if err != nil {
+		return scanner.ScanOptions{}, err
+	}
+	paper, err := promptPaper(input, output)
+	if err != nil {
+		return scanner.ScanOptions{}, err
+	}
+	mode, err := selectMode(input, output, source.ColorModes)
+	if err != nil {
+		return scanner.ScanOptions{}, err
+	}
+	resolution, err := selectResolution(input, output, source.Resolutions)
+	if err != nil {
+		return scanner.ScanOptions{}, err
+	}
+	return scanner.ScanOptions{Source: source.ID, Paper: paper, Mode: mode, Resolution: resolution}, nil
+}
+
+func selectSource(input *bufio.Reader, output io.Writer, sources []scanner.Source) (scanner.Source, error) {
+	if len(sources) == 0 {
+		return scanner.Source{}, fmt.Errorf("scanner does not advertise scan sources")
+	}
+	fmt.Fprintln(output, "Available sources:")
+	for index, source := range sources {
+		name := source.Name
+		if name == "" {
+			name = source.ID
+		}
+		fmt.Fprintf(output, "  %d. %s\n", index+1, name)
+	}
+	index, err := promptIndex(input, output, "Select source", len(sources))
+	if err != nil {
+		return scanner.Source{}, err
+	}
+	return sources[index], nil
+}
+
+func promptPaper(input *bufio.Reader, output io.Writer) (scanner.Paper, error) {
+	for {
+		fmt.Fprint(output, "Paper [a4/a5/letter] (a4): ")
+		value, err := readPrompt(input)
+		if err != nil {
+			return scanner.Paper{}, fmt.Errorf("read paper format: %w", err)
+		}
+		if value == "" {
+			return scanner.PaperA4, nil
+		}
+		paper, err := parsePaper(value)
+		if err == nil {
+			return paper, nil
+		}
+		fmt.Fprintln(output, "Please enter a4, a5, or letter.")
+	}
+}
+
+func selectMode(input *bufio.Reader, output io.Writer, modes []string) (string, error) {
+	if len(modes) == 0 {
+		return "", fmt.Errorf("scanner does not advertise color modes")
+	}
+	fmt.Fprintln(output, "Available color modes:")
+	for index, mode := range modes {
+		fmt.Fprintf(output, "  %d. %s\n", index+1, mode)
+	}
+	index, err := promptIndex(input, output, "Select color mode", len(modes))
+	if err != nil {
+		return "", err
+	}
+	return modes[index], nil
+}
+
+func selectResolution(input *bufio.Reader, output io.Writer, resolutions []int) (int, error) {
+	if len(resolutions) == 0 {
+		return 0, fmt.Errorf("scanner does not advertise scan resolutions")
+	}
+	fmt.Fprintln(output, "Available resolutions:")
+	for index, resolution := range resolutions {
+		fmt.Fprintf(output, "  %d. %d DPI\n", index+1, resolution)
+	}
+	index, err := promptIndex(input, output, "Select resolution", len(resolutions))
+	if err != nil {
+		return 0, err
+	}
+	return resolutions[index], nil
+}
+
+func promptIndex(input *bufio.Reader, output io.Writer, label string, count int) (int, error) {
+	for {
+		fmt.Fprintf(output, "%s [1]: ", label)
+		value, err := readPrompt(input)
+		if err != nil {
+			return 0, fmt.Errorf("read selection: %w", err)
+		}
+		if value == "" {
+			return 0, nil
+		}
+		index, err := strconv.Atoi(value)
+		if err == nil && index >= 1 && index <= count {
+			return index - 1, nil
+		}
+		fmt.Fprintf(output, "Please enter a number from 1 to %d.\n", count)
+	}
+}
+
+func promptOutputPath(input *bufio.Reader, output io.Writer, now time.Time) (string, error) {
+	defaultPath := now.Format("scan_20060102_150405.pdf")
+	for {
+		fmt.Fprintf(output, "Output path [%s]: ", defaultPath)
+		path, err := readPrompt(input)
+		if err != nil {
+			return "", fmt.Errorf("read output path: %w", err)
+		}
+		if path == "" {
+			path = defaultPath
+		}
+		outputPath, err := utils.NormalizePDFPath(path)
+		if err == nil {
+			return outputPath, nil
+		}
+		fmt.Fprintf(output, "Invalid output path: %v\n", err)
+	}
 }
 
 func waitForScanStart(input *bufio.Reader, output io.Writer, pages string) error {
@@ -228,34 +331,45 @@ func readPrompt(input *bufio.Reader) (string, error) {
 	return strings.TrimSpace(line), nil
 }
 
-func runDeviceList(ctx context.Context, stdout, stderr io.Writer, discover discoverScanners) int {
-	scanners, err := discover(ctx)
+func runDeviceList(ctx context.Context, stdout, stderr io.Writer, discover discoverScannerInfos) int {
+	infos, err := discover(ctx)
 	if err != nil {
 		return reportScanError(stderr, err)
 	}
-	if len(scanners) == 0 {
+	if len(infos) == 0 {
 		fmt.Fprintln(stdout, "No scanners found.")
 		return 0
 	}
 
 	fmt.Fprintln(stdout, "Available scanners:")
-	for _, availableScanner := range scanners {
+	for _, info := range infos {
 		if err := ctx.Err(); err != nil {
 			return reportScanError(stderr, err)
 		}
-		fmt.Fprintf(stdout, "- %s\n", availableScanner.ID())
+		fmt.Fprintf(stdout, "- %s\n  device: %s\n", scannerName(info), info.ID)
 	}
 
 	return 0
 }
 
-func scannerByDevice(scanners []scanner.Scanner, device string) scanner.Scanner {
-	for _, availableScanner := range scanners {
-		if availableScanner.ID() == device {
-			return availableScanner
-		}
+func scannerName(info scanner.Info) string {
+	if info.Name != "" {
+		return info.Name
 	}
-	return nil
+	return info.ID
+}
+
+func parsePaper(value string) (scanner.Paper, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "a4", "din-a4":
+		return scanner.PaperA4, nil
+	case "a5", "din-a5":
+		return scanner.PaperA5, nil
+	case "letter":
+		return scanner.PaperLetter, nil
+	default:
+		return scanner.Paper{}, fmt.Errorf("invalid paper format %q", value)
+	}
 }
 
 func reportScanError(stderr io.Writer, err error) int {
