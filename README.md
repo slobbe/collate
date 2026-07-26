@@ -1,8 +1,41 @@
 # collate
 
-Rebuild duplex documents from simplex PDF scans.
+Create duplex PDFs with a simplex scanner.
 
 ## Usage
+
+### Scanning
+
+Collate uses the eSCL protocol to discover scanners on the local network.
+
+Make an interactive scan:
+
+```sh
+collate scan [flags]
+```
+
+Optional flags:
+
+- `--device <device>`: Select a scanner by its advertised name or device URL.
+- `--source <source>`: Select an input source by ID or name, such as `Platen`, `ADF Simplex`, or `adf`.
+- `--paper <paper>`: Set the paper format to `a4`, `a5`, or `letter`.
+- `--mode <mode>`: Select an advertised color mode, such as `BlackAndWhite1`, `Grayscale8`, or `RGB24`.
+- `--resolution <dpi>`: Set an advertised source-specific resolution in DPI, such as `300`.
+- `--output <path>`: Set the output PDF path. The `.pdf` extension is added when omitted.
+
+For example, to preselect an DIN-A4, ADF scan with 300 DPI resolution and save to `document.pdf`:
+
+```sh
+collate scan --source adf --paper a4 --resolution 300 --output document.pdf
+```
+
+List available scanners without scanning:
+
+```sh
+collate scan --device-list
+```
+
+### Merge existing PDFs
 
 ```sh
 collate merge [flags] -f <front.pdf> -b <back.pdf> -o <output.pdf>
@@ -12,20 +45,6 @@ collate merge [flags] -f <front.pdf> -b <back.pdf> -o <output.pdf>
 
 ```sh
 collate merge -f front.pdf -b back.pdf -o output.pdf --backorder=forward
-```
-
-Start an interactive scan:
-
-```sh
-collate scan
-```
-
-Collate discovers eSCL scanners on the local network, lets you select a device when more than one is available, then prompts for the source, paper format, color mode, and resolution. It scans the front pages first and can then scan and collate the back pages. The output path defaults to `scan_<timestamp>.pdf`.
-
-To only list discovered scanners:
-
-```sh
-collate scan --device-list
 ```
 
 ## Install
