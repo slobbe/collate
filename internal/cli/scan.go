@@ -9,7 +9,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/slobbe/collate/internal/cli/utils"
+	clicomponent "github.com/slobbe/collate/internal/cli/components"
 	"github.com/slobbe/collate/internal/collate"
 	"github.com/slobbe/collate/internal/scanner"
 	"github.com/slobbe/collate/internal/utils"
@@ -72,7 +72,7 @@ func runScan(
 
 	input := bufio.NewReader(stdin)
 	var infos []scanner.Info
-	err := (cliutils.Waiting{Message: "Discovering scanners"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
+	err := (clicomponent.Waiting{Message: "Discovering scanners"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
 		var discoverErr error
 		infos, discoverErr = discover(ctx)
 		return "Discovered scanners", discoverErr
@@ -86,7 +86,7 @@ func runScan(
 	}
 
 	var capabilities scanner.Capabilities
-	err = (cliutils.Waiting{Message: "Loading scanner capabilities"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
+	err = (clicomponent.Waiting{Message: "Loading scanner capabilities"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
 		var capabilitiesErr error
 		capabilities, capabilitiesErr = capabilitiesFor(ctx, device.ID)
 		return "Loaded scanner capabilities", capabilitiesErr
@@ -99,11 +99,11 @@ func runScan(
 		return reportScanError(stderr, err)
 	}
 
-	if err := (cliutils.Confirm{Prompt: "Load the front pages", Done: "Ready"}).Run(ctx, input, stdout); err != nil {
+	if err := (clicomponent.Confirm{Prompt: "Load the front pages", Done: "Ready"}).Run(ctx, input, stdout); err != nil {
 		return reportScanError(stderr, err)
 	}
 	var session *collate.ScanSession
-	err = (cliutils.Waiting{Message: "Scanning front pages"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
+	err = (clicomponent.Waiting{Message: "Scanning front pages"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
 		var scanErr error
 		session, scanErr = start(ctx, device.ID, options)
 		return "Scanned front pages", scanErr
@@ -113,7 +113,7 @@ func runScan(
 	}
 	defer session.Close()
 
-	scanBack, err := (cliutils.YesNo{Prompt: "Scan back pages too?"}).Run(ctx, input, stdout)
+	scanBack, err := (clicomponent.YesNo{Prompt: "Scan back pages too?"}).Run(ctx, input, stdout)
 	if err != nil {
 		return reportScanError(stderr, err)
 	}
@@ -124,10 +124,10 @@ func runScan(
 		if err != nil {
 			return reportScanError(stderr, err)
 		}
-		if err := (cliutils.Confirm{Prompt: "Load the back pages", Done: "Ready"}).Run(ctx, input, stdout); err != nil {
+		if err := (clicomponent.Confirm{Prompt: "Load the back pages", Done: "Ready"}).Run(ctx, input, stdout); err != nil {
 			return reportScanError(stderr, err)
 		}
-		if err := (cliutils.Waiting{Message: "Scanning back pages"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
+		if err := (clicomponent.Waiting{Message: "Scanning back pages"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
 			return "Scanned back pages", session.ScanBack(ctx)
 		}); err != nil {
 			return reportScanError(stderr, err)
@@ -143,7 +143,7 @@ func runScan(
 	if err != nil {
 		return reportScanError(stderr, err)
 	}
-	err = (cliutils.Waiting{Message: "Saving PDF"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
+	err = (clicomponent.Waiting{Message: "Saving PDF"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
 		if scanBack {
 			err := session.Collate(ctx, outputPath, backOrder)
 			return fmt.Sprintf("Scanned and collated successfully: %s", outputPath), err
