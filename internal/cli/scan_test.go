@@ -118,7 +118,7 @@ func TestRunScanUsesOnlyScannerAndDefaultOptions(t *testing.T) {
 	if !front.closed {
 		t.Fatal("front result was not closed")
 	}
-	if !strings.Contains(stdout, "Using scanner: Scanner One") || !strings.Contains(stdout, "Load the front pages.") || !strings.Contains(stdout, "Output path [scan_20260726_123456.pdf]:") {
+	if !strings.Contains(stdout, "Using scanner: Scanner One") || !strings.Contains(stdout, "Load the front pages: Ready") || !strings.Contains(stdout, "Output path [scan_20260726_123456.pdf]:") {
 		t.Fatalf("stdout = %q, want guided scan prompts", stdout)
 	}
 	if stderr != "" {
@@ -130,7 +130,7 @@ func TestRunScanLetsUserSelectScannerAndOptions(t *testing.T) {
 	selected := &scanTestScanner{info: scanner.Info{ID: "scanner-2", Name: "Scanner Two"}}
 	code, stdout, stderr := runScanCommand(
 		nil,
-		"2\n2\nletter\n2\n2\n\nn\ncustom.pdf\n",
+		"2\n2\n3\n2\n2\n\nn\ncustom.pdf\n",
 		startFor(selected),
 		func(context.Context) ([]scanner.Info, error) {
 			return []scanner.Info{{ID: "scanner-1", Name: "Scanner One"}, selected.info}, nil
@@ -145,7 +145,7 @@ func TestRunScanLetsUserSelectScannerAndOptions(t *testing.T) {
 	if got := selected.scanOptions[0]; got != want {
 		t.Fatalf("scan options = %#v, want %#v", got, want)
 	}
-	if !strings.Contains(stdout, "Available scanners:\n  1. Scanner One\n  2. Scanner Two") {
+	if !strings.Contains(stdout, "[1] Scanner One\n[2] Scanner Two") || !strings.Contains(stdout, "Select scanner: Scanner Two") {
 		t.Fatalf("stdout = %q, want scanner selection", stdout)
 	}
 	if got := filepath.Base(selected.results[0].savedPaths[0]); got != "custom.pdf" {
@@ -184,7 +184,7 @@ func TestRunScanFlagsSkipScannerOptionAndOutputPrompts(t *testing.T) {
 	if got := selected.scanOptions[0]; got != want {
 		t.Fatalf("scan options = %#v, want %#v", got, want)
 	}
-	for _, prompt := range []string{"Available scanners:", "Available sources:", "Paper [", "Available color modes:", "Available resolutions:", "Output path ["} {
+	for _, prompt := range []string{"Select scanner [", "Select source [", "Select paper [", "Select color mode [", "Select resolution [", "Output path ["} {
 		if strings.Contains(stdout, prompt) {
 			t.Fatalf("stdout contains skipped prompt %q: %q", prompt, stdout)
 		}
@@ -240,7 +240,7 @@ func TestRunScanCollatesBackPagesBeforeAskingForOutput(t *testing.T) {
 	if got, want := output.PageCount(), 2; got != want {
 		t.Fatalf("page count = %d, want %d", got, want)
 	}
-	if outputPrompt, backPrompt := strings.Index(stdout, "Output path ["), strings.Index(stdout, "Load the back pages."); outputPrompt < backPrompt {
+	if outputPrompt, backPrompt := strings.Index(stdout, "Output path ["), strings.Index(stdout, "Load the back pages: Ready"); outputPrompt < backPrompt {
 		t.Fatalf("output was requested before back scan: %q", stdout)
 	}
 	if !front.closed || !back.closed {
