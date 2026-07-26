@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/slobbe/collate/internal/scanner"
-	escl "github.com/slobbe/collate/internal/scanner/eSCL"
+	"github.com/slobbe/collate/internal/scanner/escl"
 )
 
 type discoverESCLDevices func(context.Context) ([]escl.Device, error)
@@ -73,7 +73,7 @@ func scannerByID(ctx context.Context, deviceID string, discover discoverESCLDevi
 		if device.ID != deviceID {
 			continue
 		}
-		return escl.NewAirscanner(device.Name, device.BaseURL.String()), nil
+		return escl.New(device), nil
 	}
 	return nil, fmt.Errorf("scanner %q not found; run \"collate scan --device-list\" to list available scanners", deviceID)
 }

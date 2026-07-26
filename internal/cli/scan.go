@@ -39,8 +39,14 @@ func runScan(
 	flags := flag.NewFlagSet("collate scan", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	deviceListFlag := flags.Bool("device-list", false, "list available scanners")
+	deviceFlag := flags.String("device", "", "scanner device ID or name")
+	sourceFlag := flags.String("source", "", "scanner source ID or name, such as ADF")
+	paperFlag := flags.String("paper", "", "paper format: a4, a5, or letter")
+	modeFlag := flags.String("mode", "", "scanner color mode ID")
+	resolutionFlag := flags.Int("resolution", 0, "scan resolution in DPI")
+	outputFlag := flags.String("output", "", "output PDF path")
 	flags.Usage = func() {
-		fmt.Fprintf(flags.Output(), "usage: %s [--device-list]\n", flags.Name())
+		fmt.Fprintf(flags.Output(), "usage: %s [--device-list] [--device <device>] [--source <source>] [--paper <paper>] [--mode <mode>] [--resolution <dpi>] [--output <path>]\n", flags.Name())
 		flags.PrintDefaults()
 	}
 
@@ -57,6 +63,11 @@ func runScan(
 		return 2
 	}
 	if *deviceListFlag {
+		if *deviceFlag != "" || *sourceFlag != "" || *paperFlag != "" || *modeFlag != "" || *resolutionFlag != 0 || *outputFlag != "" {
+			fmt.Fprintln(stderr, "error: --device-list cannot be combined with scan options")
+			flags.Usage()
+			return 2
+		}
 		return runDeviceList(ctx, stdout, stderr, discover)
 	}
 
@@ -65,7 +76,7 @@ func runScan(
 	if err != nil {
 		return reportScanError(stderr, err)
 	}
-	device, err := selectScanner(input, stdout, infos)
+	device, err := resolveScanner(input, stdout, infos, *deviceFlag)
 	if err != nil {
 		return reportScanError(stderr, err)
 	}
@@ -74,7 +85,7 @@ func runScan(
 	if err != nil {
 		return reportScanError(stderr, err)
 	}
-	options, err := selectScanOptions(input, stdout, capabilities)
+	options, err := resolveScanOptions(input, stdout, capabilities, *sourceFlag, *paperFlag, *modeFlag, *resolutionFlag)
 	if err != nil {
 		return reportScanError(stderr, err)
 	}
@@ -107,7 +118,12 @@ func runScan(
 		}
 	}
 
-	outputPath, err := promptOutputPath(input, stdout, now())
+	var outputPath string
+	if *outputFlag == "" {
+		outputPath, err = promptOutputPath(input, stdout, now())
+	} else {
+		outputPath, err = utils.NormalizePDFPath(*outputFlag)
+	}
 	if err != nil {
 		return reportScanError(stderr, err)
 	}
@@ -126,6 +142,28 @@ func runScan(
 		fmt.Fprintf(stdout, "scanned successfully: %s\n", outputPath)
 	}
 	return 0
+}
+
+func resolveScanner(input *bufio.Reader, output io.Writer, infos []scanner.Info, value string) (scanner.Info, error) {
+	if value == "" {
+		return selectScanner(input, output, infos)
+	}
+
+	var matches []scanner.Info
+	for _, info := range infos {
+		if matchesValue(value, info.ID, info.Name) {
+			matches = append(matches, info)
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return scanner.Info{}, fmt.Errorf("scanner %q not found", value)
+	case 1:
+		fmt.Fprintf(output, "Using scanner: %s\n", scannerName(matches[0]))
+		return matches[0], nil
+	default:
+		return scanner.Info{}, fmt.Errorf("scanner %q is ambiguous", value)
+	}
 }
 
 func selectScanner(input *bufio.Reader, output io.Writer, infos []scanner.Info) (scanner.Info, error) {
@@ -149,24 +187,117 @@ func selectScanner(input *bufio.Reader, output io.Writer, infos []scanner.Info) 
 	return infos[index], nil
 }
 
-func selectScanOptions(input *bufio.Reader, output io.Writer, capabilities scanner.Capabilities) (scanner.ScanOptions, error) {
-	source, err := selectSource(input, output, capabilities.Sources)
+func resolveScanOptions(
+	input *bufio.Reader,
+	output io.Writer,
+	capabilities scanner.Capabilities,
+	sourceValue, paperValue, modeValue string,
+	resolutionValue int,
+) (scanner.ScanOptions, error) {
+	var source scanner.Source
+	var err error
+	if sourceValue == "" {
+		source, err = selectSource(input, output, capabilities.Sources)
+	} else {
+		source, err = resolveSource(capabilities.Sources, sourceValue)
+	}
 	if err != nil {
 		return scanner.ScanOptions{}, err
 	}
-	paper, err := promptPaper(input, output)
+
+	var paper scanner.Paper
+	if paperValue == "" {
+		paper, err = promptPaper(input, output)
+	} else {
+		paper, err = parsePaper(paperValue)
+	}
 	if err != nil {
 		return scanner.ScanOptions{}, err
 	}
-	mode, err := selectMode(input, output, source.ColorModes)
+
+	var mode string
+	if modeValue == "" {
+		mode, err = selectMode(input, output, source.ColorModes)
+	} else {
+		mode, err = resolveMode(source.ColorModes, modeValue)
+	}
 	if err != nil {
 		return scanner.ScanOptions{}, err
 	}
-	resolution, err := selectResolution(input, output, source.Resolutions)
+
+	resolution := resolutionValue
+	if resolution == 0 {
+		resolution, err = selectResolution(input, output, source.Resolutions)
+	} else if !containsResolution(source.Resolutions, resolution) {
+		err = fmt.Errorf("source %q does not support %d DPI", source.ID, resolution)
+	}
 	if err != nil {
 		return scanner.ScanOptions{}, err
 	}
+
 	return scanner.ScanOptions{Source: source.ID, Paper: paper, Mode: mode, Resolution: resolution}, nil
+}
+
+func selectScanOptions(input *bufio.Reader, output io.Writer, capabilities scanner.Capabilities) (scanner.ScanOptions, error) {
+	return resolveScanOptions(input, output, capabilities, "", "", "", 0)
+}
+
+func resolveSource(sources []scanner.Source, value string) (scanner.Source, error) {
+	var matches []scanner.Source
+	for _, source := range sources {
+		if matchesValue(value, source.ID, source.Name) {
+			matches = append(matches, source)
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return scanner.Source{}, fmt.Errorf("scan source %q is not supported", value)
+	case 1:
+		return matches[0], nil
+	default:
+		return scanner.Source{}, fmt.Errorf("scan source %q is ambiguous", value)
+	}
+}
+
+func resolveMode(modes []string, value string) (string, error) {
+	var matches []string
+	for _, mode := range modes {
+		if matchesValue(value, mode) {
+			matches = append(matches, mode)
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return "", fmt.Errorf("color mode %q is not supported", value)
+	case 1:
+		return matches[0], nil
+	default:
+		return "", fmt.Errorf("color mode %q is ambiguous", value)
+	}
+}
+
+func matchesValue(value string, candidates ...string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	for _, candidate := range candidates {
+		if strings.ToLower(strings.TrimSpace(candidate)) == value {
+			return true
+		}
+	}
+	for _, candidate := range candidates {
+		if strings.Contains(strings.ToLower(candidate), value) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsResolution(resolutions []int, value int) bool {
+	for _, resolution := range resolutions {
+		if resolution == value {
+			return true
+		}
+	}
+	return false
 }
 
 func selectSource(input *bufio.Reader, output io.Writer, sources []scanner.Source) (scanner.Source, error) {
