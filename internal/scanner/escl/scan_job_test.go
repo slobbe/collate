@@ -13,9 +13,22 @@ import (
 )
 
 func TestCreateScanJobRejectsExternalAbsoluteLocation(t *testing.T) {
+	externalRequests := 0
+	external := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		externalRequests++
+	}))
+	defer external.Close()
+
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		response.Header().Set("Location", "https://example.com/eSCL/ScanJobs/42")
-		response.WriteHeader(http.StatusCreated)
+		switch request.URL.Path {
+		case "/eSCL/ScannerStatus":
+			io.WriteString(response, `<ScannerStatus><State>Idle</State></ScannerStatus>`)
+		case "/eSCL/ScanJobs":
+			response.Header().Set("Location", external.URL+"/eSCL/ScanJobs/42")
+			response.WriteHeader(http.StatusCreated)
+		default:
+			http.Error(response, "unexpected request", http.StatusNotFound)
+		}
 	}))
 	defer server.Close()
 
@@ -23,14 +36,17 @@ func TestCreateScanJobRejectsExternalAbsoluteLocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = createScanJob(context.Background(), server.Client(), baseURL, collate.ScanOptions{
+	_, err = performScan(context.Background(), server.Client(), baseURL, t.TempDir(), collate.ScanOptions{
 		Source:     "Platen",
 		Mode:       "RGB24",
 		Paper:      collate.Paper{WidthMicrometres: 210_000, HeightMicrometres: 297_000},
 		Resolution: 300,
 	})
 	if err == nil {
-		t.Fatal("createScanJob accepted an external Location")
+		t.Fatal("performScan accepted an external Location")
+	}
+	if externalRequests != 0 {
+		t.Fatalf("external scanner received %d follow-up requests", externalRequests)
 	}
 }
 
