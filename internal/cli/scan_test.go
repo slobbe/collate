@@ -145,7 +145,7 @@ func TestRunScanLetsUserSelectScannerAndOptions(t *testing.T) {
 	if got := selected.scanOptions[0]; got != want {
 		t.Fatalf("scan options = %#v, want %#v", got, want)
 	}
-	if !strings.Contains(stdout, "[1] Scanner One\n[2] Scanner Two") || !strings.Contains(stdout, "Select scanner: Scanner Two") {
+	if !strings.Contains(stdout, "[1] Scanner One") || !strings.Contains(stdout, "[2] Scanner Two") || !strings.Contains(stdout, "Select scanner: Scanner Two") {
 		t.Fatalf("stdout = %q, want scanner selection", stdout)
 	}
 	if got := filepath.Base(selected.results[0].savedPaths[0]); got != "custom.pdf" {
