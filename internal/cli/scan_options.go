@@ -8,15 +8,15 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/slobbe/collate/internal/scanner"
+	"github.com/slobbe/collate/internal/collate"
 )
 
-func resolveScanner(ctx context.Context, input *bufio.Reader, output io.Writer, infos []scanner.Info, value string) (scanner.Info, error) {
+func resolveScanner(ctx context.Context, input *bufio.Reader, output io.Writer, infos []collate.ScannerInfo, value string) (collate.ScannerInfo, error) {
 	if value == "" {
 		return selectScanner(ctx, input, output, infos)
 	}
 
-	var matches []scanner.Info
+	var matches []collate.ScannerInfo
 	for _, info := range infos {
 		if matchesValue(value, info.ID, info.Name) {
 			matches = append(matches, info)
@@ -24,12 +24,12 @@ func resolveScanner(ctx context.Context, input *bufio.Reader, output io.Writer, 
 	}
 	switch len(matches) {
 	case 0:
-		return scanner.Info{}, fmt.Errorf("scanner %q not found", value)
+		return collate.ScannerInfo{}, fmt.Errorf("scanner %q not found", value)
 	case 1:
 		fmt.Fprintf(output, "Using scanner: %s\n", scannerName(matches[0]))
 		return matches[0], nil
 	default:
-		return scanner.Info{}, fmt.Errorf("scanner %q is ambiguous", value)
+		return collate.ScannerInfo{}, fmt.Errorf("scanner %q is ambiguous", value)
 	}
 }
 
@@ -37,11 +37,11 @@ func resolveScanOptions(
 	ctx context.Context,
 	input *bufio.Reader,
 	output io.Writer,
-	capabilities scanner.Capabilities,
+	capabilities collate.Capabilities,
 	sourceValue, paperValue, modeValue string,
 	resolutionValue int,
-) (scanner.ScanOptions, error) {
-	var source scanner.Source
+) (collate.ScanOptions, error) {
+	var source collate.ScanSource
 	var err error
 	if sourceValue == "" {
 		source, err = selectSource(ctx, input, output, capabilities.Sources)
@@ -49,17 +49,17 @@ func resolveScanOptions(
 		source, err = resolveSource(capabilities.Sources, sourceValue)
 	}
 	if err != nil {
-		return scanner.ScanOptions{}, err
+		return collate.ScanOptions{}, err
 	}
 
-	var paper scanner.Paper
+	var paper collate.Paper
 	if paperValue == "" {
 		paper, err = promptPaper(ctx, input, output)
 	} else {
 		paper, err = parsePaper(paperValue)
 	}
 	if err != nil {
-		return scanner.ScanOptions{}, err
+		return collate.ScanOptions{}, err
 	}
 
 	var mode string
@@ -69,7 +69,7 @@ func resolveScanOptions(
 		mode, err = resolveMode(source.ColorModes, modeValue)
 	}
 	if err != nil {
-		return scanner.ScanOptions{}, err
+		return collate.ScanOptions{}, err
 	}
 
 	resolution := resolutionValue
@@ -79,14 +79,14 @@ func resolveScanOptions(
 		err = fmt.Errorf("source %q does not support %d DPI", source.ID, resolution)
 	}
 	if err != nil {
-		return scanner.ScanOptions{}, err
+		return collate.ScanOptions{}, err
 	}
 
-	return scanner.ScanOptions{Source: source.ID, Paper: paper, Mode: mode, Resolution: resolution}, nil
+	return collate.ScanOptions{Source: source.ID, Paper: paper, Mode: mode, Resolution: resolution}, nil
 }
 
-func resolveSource(sources []scanner.Source, value string) (scanner.Source, error) {
-	var matches []scanner.Source
+func resolveSource(sources []collate.ScanSource, value string) (collate.ScanSource, error) {
+	var matches []collate.ScanSource
 	for _, source := range sources {
 		if matchesValue(value, source.ID, source.Name) {
 			matches = append(matches, source)
@@ -94,11 +94,11 @@ func resolveSource(sources []scanner.Source, value string) (scanner.Source, erro
 	}
 	switch len(matches) {
 	case 0:
-		return scanner.Source{}, fmt.Errorf("scan source %q is not supported", value)
+		return collate.ScanSource{}, fmt.Errorf("scan source %q is not supported", value)
 	case 1:
 		return matches[0], nil
 	default:
-		return scanner.Source{}, fmt.Errorf("scan source %q is ambiguous", value)
+		return collate.ScanSource{}, fmt.Errorf("scan source %q is ambiguous", value)
 	}
 }
 
@@ -134,15 +134,15 @@ func matchesValue(value string, candidates ...string) bool {
 	return false
 }
 
-func parsePaper(value string) (scanner.Paper, error) {
+func parsePaper(value string) (collate.Paper, error) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "a4", "din-a4":
-		return scanner.PaperA4, nil
+		return collate.PaperA4, nil
 	case "a5", "din-a5":
-		return scanner.PaperA5, nil
+		return collate.PaperA5, nil
 	case "letter":
-		return scanner.PaperLetter, nil
+		return collate.PaperLetter, nil
 	default:
-		return scanner.Paper{}, fmt.Errorf("invalid paper format %q", value)
+		return collate.Paper{}, fmt.Errorf("invalid paper format %q", value)
 	}
 }

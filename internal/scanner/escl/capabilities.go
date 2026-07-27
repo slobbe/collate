@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/slobbe/collate/internal/scanner"
+	"github.com/slobbe/collate/internal/collate"
 )
 
 type scannerCapabilitiesXML struct {
@@ -67,34 +67,34 @@ type resolutionXML struct {
 	Y int `xml:"YResolution"`
 }
 
-func requestCapabilities(ctx context.Context, client *http.Client, baseURL *url.URL) (scanner.Capabilities, error) {
+func requestCapabilities(ctx context.Context, client *http.Client, baseURL *url.URL) (collate.Capabilities, error) {
 	if err := ctx.Err(); err != nil {
-		return scanner.Capabilities{}, err
+		return collate.Capabilities{}, err
 	}
 
 	if baseURL == nil {
-		return scanner.Capabilities{}, fmt.Errorf("scanner URL is required")
+		return collate.Capabilities{}, fmt.Errorf("scanner URL is required")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL.JoinPath("ScannerCapabilities").String(), nil)
 	if err != nil {
-		return scanner.Capabilities{}, err
+		return collate.Capabilities{}, err
 	}
 
 	response, err := client.Do(req)
 	if err != nil {
-		return scanner.Capabilities{}, err
+		return collate.Capabilities{}, err
 	}
 
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		return scanner.Capabilities{}, fmt.Errorf("get scanner capabilities: %d", response.StatusCode)
+		return collate.Capabilities{}, fmt.Errorf("get scanner capabilities: %d", response.StatusCode)
 	}
 
 	document, err := parseCapabilities(response.Body)
 	if err != nil {
-		return scanner.Capabilities{}, fmt.Errorf("parse scanner capabilities: %w", err)
+		return collate.Capabilities{}, fmt.Errorf("parse scanner capabilities: %w", err)
 	}
 
 	return mapCapabilities(document), nil
@@ -117,15 +117,15 @@ func parseCapabilities(body io.Reader) (scannerCapabilitiesXML, error) {
 	return document, nil
 }
 
-func mapCapabilities(document scannerCapabilitiesXML) scanner.Capabilities {
-	var capabilities scanner.Capabilities
+func mapCapabilities(document scannerCapabilitiesXML) collate.Capabilities {
+	var capabilities collate.Capabilities
 
 	appendSource := func(id, name string, feeder, duplex bool, input inputCapsXML) {
 		if input.MaxWidth == 0 || input.MaxHeight == 0 {
 			return
 		}
 
-		source := scanner.Source{
+		source := collate.ScanSource{
 			ID:     id,
 			Name:   name,
 			Feeder: feeder,

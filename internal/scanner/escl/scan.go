@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/slobbe/collate/internal/scanner"
+	"github.com/slobbe/collate/internal/collate"
 )
 
 const statusPollInterval = 500 * time.Millisecond
@@ -18,7 +18,7 @@ func performScan(
 	client *http.Client,
 	baseURL *url.URL,
 	workingDir string,
-	options scanner.ScanOptions,
+	options collate.ScanOptions,
 ) (*scanResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

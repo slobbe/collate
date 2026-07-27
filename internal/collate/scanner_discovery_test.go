@@ -3,23 +3,45 @@ package collate
 import (
 	"context"
 	"testing"
-
-	"github.com/slobbe/collate/internal/scanner"
-	"github.com/slobbe/collate/internal/scanner/escl"
 )
 
-func TestDiscoverScannersMapsESCLDevicesToScannerInfo(t *testing.T) {
-	infos, err := discoverScanners(context.Background(), func(context.Context) ([]escl.Device, error) {
-		return []escl.Device{
-			{Name: "Brother MFC", ID: "http://brother.local/eSCL"},
-			{Name: "HP OfficeJet", ID: "https://hp.local/eSCL"},
-		}, nil
-	})
+type scannerProviderStub struct {
+	scanners []Scanner
+	err      error
+}
+
+func (p scannerProviderStub) Discover(context.Context) ([]Scanner, error) {
+	return p.scanners, p.err
+}
+
+type scannerStub struct {
+	info ScannerInfo
+}
+
+func (s scannerStub) Info() ScannerInfo {
+	return s.info
+}
+
+func (scannerStub) Capabilities(context.Context) (Capabilities, error) {
+	return Capabilities{}, nil
+}
+
+func (scannerStub) Scan(context.Context, ScanOptions) (ScanResult, error) {
+	return nil, nil
+}
+
+func TestScanServiceDiscoversScannerInfo(t *testing.T) {
+	service := NewScanService(scannerProviderStub{scanners: []Scanner{
+		scannerStub{info: ScannerInfo{Name: "Brother MFC", ID: "http://brother.local/eSCL"}},
+		scannerStub{info: ScannerInfo{Name: "HP OfficeJet", ID: "https://hp.local/eSCL"}},
+	}})
+
+	infos, err := service.DiscoverScanners(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	want := []scanner.Info{
+	want := []ScannerInfo{
 		{Name: "Brother MFC", ID: "http://brother.local/eSCL"},
 		{Name: "HP OfficeJet", ID: "https://hp.local/eSCL"},
 	}

@@ -32,7 +32,7 @@ func (s Select[T]) Run(ctx context.Context, input *bufio.Reader, output io.Write
 	rewrite := isTerminal(output)
 	renderedLines := len(s.Options)
 	for index, option := range s.Options {
-		fmt.Fprintf(output, "[%d] %s (%v)\n", index+1, option.Label, option.Value)
+		fmt.Fprintf(output, "[%d] %s\n", index+1, option.Label)
 	}
 
 	for {
@@ -68,7 +68,7 @@ func (s Select[T]) Run(ctx context.Context, input *bufio.Reader, output io.Write
 		} else {
 			fmt.Fprintln(output)
 		}
-		fmt.Fprintf(output, "%s: %s (%v)\n", s.Prompt, s.Options[index].Label, s.Options[index].Value)
+		fmt.Fprintf(output, "%s: %s\n", s.Prompt, s.Options[index].Label)
 		return s.Options[index].Value, nil
 	}
 }

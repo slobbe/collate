@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/slobbe/collate/internal/scanner"
+	"github.com/slobbe/collate/internal/collate"
 )
 
-func buildScanRequest(options scanner.ScanOptions) ([]byte, error) {
+func buildScanRequest(options collate.ScanOptions) ([]byte, error) {
 	if options.Mode == "" {
 		return nil, fmt.Errorf("scan mode is required")
 	}

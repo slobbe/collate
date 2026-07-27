@@ -10,44 +10,43 @@ import (
 
 	"github.com/slobbe/collate/internal/cli/components"
 	"github.com/slobbe/collate/internal/collate"
-	"github.com/slobbe/collate/internal/scanner"
 	"github.com/slobbe/collate/internal/utils"
 )
 
-func selectScanner(ctx context.Context, input *bufio.Reader, output io.Writer, infos []scanner.Info) (scanner.Info, error) {
+func selectScanner(ctx context.Context, input *bufio.Reader, output io.Writer, infos []collate.ScannerInfo) (collate.ScannerInfo, error) {
 	if len(infos) == 0 {
-		return scanner.Info{}, fmt.Errorf("no scanners found")
+		return collate.ScannerInfo{}, fmt.Errorf("no scanners found")
 	}
 	if len(infos) == 1 {
 		fmt.Fprintf(output, "Using scanner: %s\n", scannerName(infos[0]))
 		return infos[0], nil
 	}
 
-	options := make([]clicomponent.SelectOption[scanner.Info], len(infos))
+	options := make([]clicomponent.SelectOption[collate.ScannerInfo], len(infos))
 	for index, info := range infos {
-		options[index] = clicomponent.SelectOption[scanner.Info]{Value: info, Label: scannerName(info)}
+		options[index] = clicomponent.SelectOption[collate.ScannerInfo]{Value: info, Label: scannerName(info)}
 	}
-	return (clicomponent.Select[scanner.Info]{Prompt: "Select scanner", Options: options}).Run(ctx, input, output)
+	return (clicomponent.Select[collate.ScannerInfo]{Prompt: "Select scanner", Options: options}).Run(ctx, input, output)
 }
 
-func selectSource(ctx context.Context, input *bufio.Reader, output io.Writer, sources []scanner.Source) (scanner.Source, error) {
+func selectSource(ctx context.Context, input *bufio.Reader, output io.Writer, sources []collate.ScanSource) (collate.ScanSource, error) {
 	if len(sources) == 0 {
-		return scanner.Source{}, fmt.Errorf("scanner does not advertise scan sources")
+		return collate.ScanSource{}, fmt.Errorf("scanner does not advertise scan sources")
 	}
-	options := make([]clicomponent.SelectOption[scanner.Source], len(sources))
+	options := make([]clicomponent.SelectOption[collate.ScanSource], len(sources))
 	for index, source := range sources {
-		options[index] = clicomponent.SelectOption[scanner.Source]{Value: source, Label: sourceLabel(source)}
+		options[index] = clicomponent.SelectOption[collate.ScanSource]{Value: source, Label: sourceLabel(source)}
 	}
-	return (clicomponent.Select[scanner.Source]{Prompt: "Select source", Options: options}).Run(ctx, input, output)
+	return (clicomponent.Select[collate.ScanSource]{Prompt: "Select source", Options: options}).Run(ctx, input, output)
 }
 
-func promptPaper(ctx context.Context, input *bufio.Reader, output io.Writer) (scanner.Paper, error) {
-	return (clicomponent.Select[scanner.Paper]{
+func promptPaper(ctx context.Context, input *bufio.Reader, output io.Writer) (collate.Paper, error) {
+	return (clicomponent.Select[collate.Paper]{
 		Prompt: "Select paper",
-		Options: []clicomponent.SelectOption[scanner.Paper]{
-			{Value: scanner.PaperA4, Label: scanner.PaperA4.Name},
-			{Value: scanner.PaperA5, Label: scanner.PaperA5.Name},
-			{Value: scanner.PaperLetter, Label: scanner.PaperLetter.Name},
+		Options: []clicomponent.SelectOption[collate.Paper]{
+			{Value: collate.PaperA4, Label: collate.PaperA4.Name},
+			{Value: collate.PaperA5, Label: collate.PaperA5.Name},
+			{Value: collate.PaperLetter, Label: collate.PaperLetter.Name},
 		},
 	}).Run(ctx, input, output)
 }
@@ -92,14 +91,14 @@ func promptBackOrder(ctx context.Context, input *bufio.Reader, output io.Writer)
 	}).Run(ctx, input, output)
 }
 
-func scannerName(info scanner.Info) string {
+func scannerName(info collate.ScannerInfo) string {
 	if info.Name != "" {
 		return info.Name
 	}
 	return info.ID
 }
 
-func sourceLabel(source scanner.Source) string {
+func sourceLabel(source collate.ScanSource) string {
 	if source.Name == "" {
 		return source.ID
 	}
