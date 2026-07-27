@@ -2,10 +2,17 @@ package escl
 
 import (
 	"context"
+	"crypto/tls"
+	"errors"
+	"net"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/slobbe/collate/internal/collate"
 )
+
+const scannerHTTPTimeout = 2 * time.Minute
 
 // AirScanner adapts an eSCL device to the generic scanner interface.
 type AirScanner struct {
@@ -16,10 +23,41 @@ type AirScanner struct {
 
 // New creates a scanner for a discovered eSCL device.
 func New(device Device) *AirScanner {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if transport.TLSClientConfig == nil {
+		transport.TLSClientConfig = &tls.Config{}
+	} else {
+		transport.TLSClientConfig = transport.TLSClientConfig.Clone()
+	}
+	allowSelfSigned := device.BaseURL != nil && strings.EqualFold(device.BaseURL.Scheme, "https") && isLocalHost(device.BaseURL.Hostname())
+	transport.TLSClientConfig.InsecureSkipVerify = allowSelfSigned
+
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   scannerHTTPTimeout,
+	}
+	if allowSelfSigned {
+		scheme, host := device.BaseURL.Scheme, device.BaseURL.Host
+		client.CheckRedirect = func(request *http.Request, _ []*http.Request) error {
+			if strings.EqualFold(request.URL.Scheme, scheme) && strings.EqualFold(request.URL.Host, host) {
+				return nil
+			}
+			return errors.New("refuse scanner redirect to a different origin")
+		}
+	}
+
 	return &AirScanner{
 		device: device,
-		client: http.DefaultClient,
+		client: client,
 	}
+}
+
+func isLocalHost(host string) bool {
+	if strings.EqualFold(host, "localhost") || strings.HasSuffix(strings.ToLower(host), ".local") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && (ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast())
 }
 
 func (s *AirScanner) Info() collate.ScannerInfo {

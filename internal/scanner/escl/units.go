@@ -8,5 +8,5 @@ func toESCLUnits(micrometres int) int {
 }
 
 func toMicrometres(esclUnits int) int {
-	return (esclUnits*254 + 127) / 3
+	return (esclUnits*254 + 1) / 3
 }

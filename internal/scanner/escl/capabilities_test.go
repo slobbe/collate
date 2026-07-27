@@ -1,6 +1,28 @@
 package escl
 
-import "testing"
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+)
+
+func TestRequestCapabilitiesRejectsOversizedBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Write([]byte("<ScannerCapabilities>" + strings.Repeat(" ", maxCapabilitiesBodySize) + "</ScannerCapabilities>"))
+	}))
+	defer server.Close()
+
+	baseURL, err := url.Parse(server.URL + "/eSCL")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := requestCapabilities(context.Background(), server.Client(), baseURL); err == nil {
+		t.Fatal("requestCapabilities accepted an oversized response")
+	}
+}
 
 func TestMapCapabilitiesKeepsSettingsPerSource(t *testing.T) {
 	var document scannerCapabilitiesXML

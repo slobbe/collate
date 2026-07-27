@@ -1,6 +1,7 @@
 package escl
 
 import (
+	"bytes"
 	"context"
 	"encoding/xml"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/slobbe/collate/internal/collate"
 )
+
+const maxCapabilitiesBodySize = 1 << 20
 
 type scannerCapabilitiesXML struct {
 	XMLName xml.Name `xml:"ScannerCapabilities"`
@@ -92,7 +95,15 @@ func requestCapabilities(ctx context.Context, client *http.Client, baseURL *url.
 		return collate.Capabilities{}, fmt.Errorf("get scanner capabilities: %d", response.StatusCode)
 	}
 
-	document, err := parseCapabilities(response.Body)
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxCapabilitiesBodySize+1))
+	if err != nil {
+		return collate.Capabilities{}, fmt.Errorf("read scanner capabilities: %w", err)
+	}
+	if len(body) > maxCapabilitiesBodySize {
+		return collate.Capabilities{}, fmt.Errorf("scanner capabilities exceed %d bytes", maxCapabilitiesBodySize)
+	}
+
+	document, err := parseCapabilities(bytes.NewReader(body))
 	if err != nil {
 		return collate.Capabilities{}, fmt.Errorf("parse scanner capabilities: %w", err)
 	}

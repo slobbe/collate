@@ -16,11 +16,17 @@ func resolveScanner(ctx context.Context, input *bufio.Reader, output io.Writer, 
 		return selectScanner(ctx, input, output, infos)
 	}
 
-	var matches []collate.ScannerInfo
+	var exactMatches, partialMatches []collate.ScannerInfo
 	for _, info := range infos {
-		if matchesValue(value, info.ID, info.Name) {
-			matches = append(matches, info)
+		if exactMatchesValue(value, info.ID, info.Name) {
+			exactMatches = append(exactMatches, info)
+		} else if matchesValue(value, info.ID, info.Name) {
+			partialMatches = append(partialMatches, info)
 		}
+	}
+	matches := partialMatches
+	if len(exactMatches) > 0 {
+		matches = exactMatches
 	}
 	switch len(matches) {
 	case 0:
@@ -86,11 +92,17 @@ func resolveScanOptions(
 }
 
 func resolveSource(sources []collate.ScanSource, value string) (collate.ScanSource, error) {
-	var matches []collate.ScanSource
+	var exactMatches, partialMatches []collate.ScanSource
 	for _, source := range sources {
-		if matchesValue(value, source.ID, source.Name) {
-			matches = append(matches, source)
+		if exactMatchesValue(value, source.ID, source.Name) {
+			exactMatches = append(exactMatches, source)
+		} else if matchesValue(value, source.ID, source.Name) {
+			partialMatches = append(partialMatches, source)
 		}
+	}
+	matches := partialMatches
+	if len(exactMatches) > 0 {
+		matches = exactMatches
 	}
 	switch len(matches) {
 	case 0:
@@ -103,11 +115,17 @@ func resolveSource(sources []collate.ScanSource, value string) (collate.ScanSour
 }
 
 func resolveMode(modes []string, value string) (string, error) {
-	var matches []string
+	var exactMatches, partialMatches []string
 	for _, mode := range modes {
-		if matchesValue(value, mode) {
-			matches = append(matches, mode)
+		if exactMatchesValue(value, mode) {
+			exactMatches = append(exactMatches, mode)
+		} else if matchesValue(value, mode) {
+			partialMatches = append(partialMatches, mode)
 		}
+	}
+	matches := partialMatches
+	if len(exactMatches) > 0 {
+		matches = exactMatches
 	}
 	switch len(matches) {
 	case 0:
@@ -119,15 +137,23 @@ func resolveMode(modes []string, value string) (string, error) {
 	}
 }
 
-func matchesValue(value string, candidates ...string) bool {
+func exactMatchesValue(value string, candidates ...string) bool {
 	value = strings.ToLower(strings.TrimSpace(value))
 	for _, candidate := range candidates {
 		if strings.ToLower(strings.TrimSpace(candidate)) == value {
 			return true
 		}
 	}
+	return false
+}
+
+func matchesValue(value string, candidates ...string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if exactMatchesValue(value, candidates...) {
+		return true
+	}
 	for _, candidate := range candidates {
-		if strings.Contains(strings.ToLower(candidate), value) {
+		if strings.Contains(strings.ToLower(strings.TrimSpace(candidate)), value) {
 			return true
 		}
 	}

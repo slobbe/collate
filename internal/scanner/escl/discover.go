@@ -91,6 +91,7 @@ func Discover(ctx context.Context) ([]Device, error) {
 	for _, device := range devicesByID {
 		devices = append(devices, device)
 	}
+	devices = deduplicateDevices(devices)
 	sort.Slice(devices, func(i, j int) bool {
 		return devices[i].ID < devices[j].ID
 	})
@@ -100,6 +101,34 @@ func Discover(ctx context.Context) ([]Device, error) {
 	}
 
 	return devices, nil
+}
+
+func deduplicateDevices(devices []Device) []Device {
+	unique := make([]Device, 0, len(devices))
+	indexes := make(map[string]int, len(devices))
+	for _, device := range devices {
+		if device.BaseURL == nil {
+			unique = append(unique, device)
+			continue
+		}
+		scheme := strings.ToLower(device.BaseURL.Scheme)
+		if scheme != "http" && scheme != "https" {
+			unique = append(unique, device)
+			continue
+		}
+
+		key := strings.ToLower(device.BaseURL.Hostname()) + "\x00" + device.BaseURL.Path
+		index, found := indexes[key]
+		if !found {
+			indexes[key] = len(unique)
+			unique = append(unique, device)
+			continue
+		}
+		if scheme == "https" && strings.EqualFold(unique[index].BaseURL.Scheme, "http") {
+			unique[index] = device
+		}
+	}
+	return unique
 }
 
 func discoveryInterfaces() ([]discoveryInterface, error) {

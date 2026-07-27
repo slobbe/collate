@@ -91,6 +91,45 @@ var testCapabilities = collate.Capabilities{
 	},
 }
 
+func TestResolversPreferExactMatchOverPartialMatches(t *testing.T) {
+	t.Run("scanner", func(t *testing.T) {
+		infos := []collate.ScannerInfo{{ID: "scan"}, {ID: "scanner"}}
+		var output bytes.Buffer
+
+		got, err := resolveScanner(context.Background(), nil, &output, infos, " SCAN ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != infos[0] {
+			t.Fatalf("resolveScanner() = %#v, want %#v", got, infos[0])
+		}
+	})
+
+	t.Run("source", func(t *testing.T) {
+		sources := []collate.ScanSource{{ID: "ADF"}, {ID: "ADF Duplex"}}
+
+		got, err := resolveSource(sources, " adf ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.ID != sources[0].ID {
+			t.Fatalf("resolveSource() = %#v, want %#v", got, sources[0])
+		}
+	})
+
+	t.Run("mode", func(t *testing.T) {
+		modes := []string{"Gray", "Grayscale8"}
+
+		got, err := resolveMode(modes, " gray ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != modes[0] {
+			t.Fatalf("resolveMode() = %q, want %q", got, modes[0])
+		}
+	})
+}
+
 func TestRunScanUsesOnlyScannerAndDefaultOptions(t *testing.T) {
 	front := &scanTestResult{}
 	selected := &scanTestScanner{info: collate.ScannerInfo{ID: "scanner-1", Name: "Scanner One"}, results: []*scanTestResult{front}}
