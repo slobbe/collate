@@ -41,6 +41,12 @@ type discoveryResult struct {
 	err     error
 }
 
+type discoveryInterface struct {
+	interfaceRef *net.Interface
+	ipv4         bool
+	ipv6         bool
+}
+
 // Discover returns eSCL scanners advertised through local mDNS services.
 func Discover(ctx context.Context) ([]Device, error) {
 	if err := ctx.Err(); err != nil {
@@ -50,17 +56,24 @@ func Discover(ctx context.Context) ([]Device, error) {
 	queryCtx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
-	results := make(chan discoveryResult, len(services))
+	interfaces, err := discoveryInterfaces()
+	if err != nil {
+		return nil, fmt.Errorf("list multicast interfaces: %w", err)
+	}
+
+	results := make(chan discoveryResult, len(services)*len(interfaces))
 	for _, service := range services {
-		go func() {
-			devices, err := discoverService(queryCtx, service)
-			results <- discoveryResult{devices: devices, err: err}
-		}()
+		for _, network := range interfaces {
+			go func() {
+				devices, err := discoverService(queryCtx, service, network)
+				results <- discoveryResult{devices: devices, err: err}
+			}()
+		}
 	}
 
 	devicesByID := map[string]Device{}
 	var queryErrors []error
-	for range services {
+	for range len(services) * len(interfaces) {
 		result := <-results
 		if result.err != nil {
 			queryErrors = append(queryErrors, result.err)
@@ -89,14 +102,57 @@ func Discover(ctx context.Context) ([]Device, error) {
 	return devices, nil
 }
 
-func discoverService(ctx context.Context, service service) ([]Device, error) {
+func discoveryInterfaces() ([]discoveryInterface, error) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+
+	var networks []discoveryInterface
+	for index := range interfaces {
+		iface := &interfaces[index]
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagMulticast == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		network := discoveryInterface{interfaceRef: iface}
+		for _, addr := range addrs {
+			ipNet, ok := addr.(*net.IPNet)
+			if !ok || ipNet.IP.IsLoopback() || ipNet.IP.IsUnspecified() {
+				continue
+			}
+			if ipNet.IP.To4() != nil {
+				network.ipv4 = true
+			} else if ipNet.IP.To16() != nil {
+				network.ipv6 = true
+			}
+		}
+		if network.ipv4 || network.ipv6 {
+			networks = append(networks, network)
+		}
+	}
+
+	if len(networks) == 0 {
+		return []discoveryInterface{{ipv4: true, ipv6: true}}, nil
+	}
+	return networks, nil
+}
+
+func discoverService(ctx context.Context, service service, network discoveryInterface) ([]Device, error) {
 	entries := make(chan *mdns.ServiceEntry, 64)
 	params := &mdns.QueryParam{
-		Service: service.name,
-		Domain:  "local",
-		Timeout: discoveryTimeout,
-		Entries: entries,
-		Logger:  log.New(io.Discard, "", 0),
+		Service:     service.name,
+		Domain:      "local",
+		Timeout:     discoveryTimeout,
+		Entries:     entries,
+		Interface:   network.interfaceRef,
+		DisableIPv4: !network.ipv4,
+		DisableIPv6: !network.ipv6,
+		Logger:      log.New(io.Discard, "", 0),
 	}
 
 	done := make(chan error, 1)
