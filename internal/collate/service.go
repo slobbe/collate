@@ -17,7 +17,7 @@ func NewScanService(provider ScannerProvider) *ScanService {
 
 // DiscoverScanners returns scanners available through the configured provider.
 func (s *ScanService) DiscoverScanners(ctx context.Context) ([]ScannerInfo, error) {
-	scanners, err := s.provider.Discover(ctx)
+	scanners, err := s.discoverScanners(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -47,15 +47,18 @@ func (s *ScanService) StartScanByID(ctx context.Context, deviceID string, option
 	return StartScan(ctx, scanner, options)
 }
 
-func (s *ScanService) scannerByID(ctx context.Context, deviceID string) (Scanner, error) {
+func (s *ScanService) discoverScanners(ctx context.Context) ([]Scanner, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if s == nil || s.provider == nil {
 		return nil, fmt.Errorf("scanner provider is required")
 	}
+	return s.provider.Discover(ctx)
+}
 
-	scanners, err := s.provider.Discover(ctx)
+func (s *ScanService) scannerByID(ctx context.Context, deviceID string) (Scanner, error) {
+	scanners, err := s.discoverScanners(ctx)
 	if err != nil {
 		return nil, err
 	}

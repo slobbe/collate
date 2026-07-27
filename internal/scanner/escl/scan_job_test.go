@@ -12,6 +12,28 @@ import (
 	"github.com/slobbe/collate/internal/collate"
 )
 
+func TestCreateScanJobRejectsExternalAbsoluteLocation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Location", "https://example.com/eSCL/ScanJobs/42")
+		response.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	baseURL, err := url.Parse(server.URL + "/eSCL")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = createScanJob(context.Background(), server.Client(), baseURL, collate.ScanOptions{
+		Source:     "Platen",
+		Mode:       "RGB24",
+		Paper:      collate.Paper{WidthMicrometres: 210_000, HeightMicrometres: 297_000},
+		Resolution: 300,
+	})
+	if err == nil {
+		t.Fatal("createScanJob accepted an external Location")
+	}
+}
+
 func TestScanJobLifecycle(t *testing.T) {
 	const document = "%PDF-test"
 	var created, downloaded, deleted bool

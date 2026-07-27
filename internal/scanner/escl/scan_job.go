@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/slobbe/collate/internal/collate"
 )
@@ -47,6 +48,9 @@ func createScanJob(ctx context.Context, client *http.Client, baseURL *url.URL, o
 	jobURL, err := request.URL.Parse(location)
 	if err != nil {
 		return nil, fmt.Errorf("parse scan job location %q: %w", location, err)
+	}
+	if !strings.EqualFold(jobURL.Scheme, request.URL.Scheme) || !strings.EqualFold(jobURL.Host, request.URL.Host) {
+		return nil, fmt.Errorf("scan job location %q has a different origin", location)
 	}
 	return jobURL, nil
 }

@@ -2,6 +2,7 @@ package escl
 
 import (
 	"net"
+	"net/url"
 	"testing"
 
 	"github.com/hashicorp/mdns"
@@ -96,6 +97,28 @@ func TestDeviceFromEntry(t *testing.T) {
 				t.Fatalf("device name = %q, want %q", got.Name, test.wantName)
 			}
 		})
+	}
+}
+
+func TestDeduplicateDevicesPrefersHTTPSForSameHostAndResource(t *testing.T) {
+	httpURL, err := url.Parse("http://scanner.local:8080/eSCL")
+	if err != nil {
+		t.Fatal(err)
+	}
+	httpsURL, err := url.Parse("https://scanner.local:8443/eSCL")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	devices := deduplicateDevices([]Device{
+		{ID: httpURL.String(), BaseURL: httpURL},
+		{ID: httpsURL.String(), BaseURL: httpsURL},
+	})
+	if len(devices) != 1 {
+		t.Fatalf("device count = %d, want 1", len(devices))
+	}
+	if devices[0].ID != httpsURL.String() {
+		t.Fatalf("device ID = %q, want HTTPS endpoint %q", devices[0].ID, httpsURL)
 	}
 }
 

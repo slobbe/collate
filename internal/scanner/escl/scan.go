@@ -11,7 +11,10 @@ import (
 	"github.com/slobbe/collate/internal/collate"
 )
 
-const statusPollInterval = 500 * time.Millisecond
+const (
+	statusPollInterval    = 500 * time.Millisecond
+	scanJobCleanupTimeout = 5 * time.Second
+)
 
 func performScan(
 	ctx context.Context,
@@ -34,6 +37,15 @@ func performScan(
 	if err != nil {
 		return nil, fmt.Errorf("create scan job: %w", err)
 	}
+	jobDeleted := false
+	defer func() {
+		if jobDeleted {
+			return
+		}
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), scanJobCleanupTimeout)
+		defer cancel()
+		_ = deleteScanJob(cleanupCtx, client, jobURL)
+	}()
 
 	documentPath, err := downloadNextDocument(ctx, client, jobURL, workingDir)
 	if err != nil {
@@ -49,6 +61,7 @@ func performScan(
 	if err := deleteScanJob(ctx, client, jobURL); err != nil {
 		return nil, err
 	}
+	jobDeleted = true
 
 	cleanup = false
 	return &scanResult{path: documentPath}, nil

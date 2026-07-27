@@ -30,6 +30,23 @@ func (scannerStub) Scan(context.Context, ScanOptions) (ScanResult, error) {
 	return nil, nil
 }
 
+func TestScanServiceDiscoverScannersRequiresProvider(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		service *ScanService
+	}{
+		{name: "nil service"},
+		{name: "nil provider", service: NewScanService(nil)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := test.service.DiscoverScanners(context.Background())
+			if err == nil || err.Error() != "scanner provider is required" {
+				t.Fatalf("DiscoverScanners() error = %v, want %q", err, "scanner provider is required")
+			}
+		})
+	}
+}
+
 func TestScanServiceDiscoversScannerInfo(t *testing.T) {
 	service := NewScanService(scannerProviderStub{scanners: []Scanner{
 		scannerStub{info: ScannerInfo{Name: "Brother MFC", ID: "http://brother.local/eSCL"}},

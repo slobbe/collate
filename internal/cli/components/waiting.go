@@ -2,6 +2,7 @@ package clicomponent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -58,16 +59,16 @@ func (w Waiting) Run(ctx context.Context, output io.Writer, action func(context.
 	for {
 		select {
 		case result := <-result:
-			fmt.Fprint(output, "\r\x1b[2K")
+			_, cleanupErr := fmt.Fprint(output, "\r\x1b[2K")
 			if result.err == nil {
 				fmt.Fprintln(output, result.message)
 			}
-			return result.err
+			return errors.Join(result.err, cleanupErr)
 		case <-ticker.C:
 			render()
 		case <-ctx.Done():
-			fmt.Fprint(output, "\r\x1b[2K")
-			return ctx.Err()
+			_, cleanupErr := fmt.Fprint(output, "\r\x1b[2K")
+			return errors.Join(ctx.Err(), cleanupErr)
 		}
 	}
 }

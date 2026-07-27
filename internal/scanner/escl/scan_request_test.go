@@ -38,6 +38,12 @@ func TestBuildScanRequestMapsSources(t *testing.T) {
 			if !strings.Contains(xml, "<pwg:Width>2480</pwg:Width>") || !strings.Contains(xml, "<pwg:Height>3508</pwg:Height>") {
 				t.Fatalf("ticket does not contain A4 eSCL dimensions: %s", xml)
 			}
+			if !strings.Contains(xml, "<scan:ColorMode>RGB24</scan:ColorMode>") {
+				t.Fatalf("ticket does not contain RGB24 color mode: %s", xml)
+			}
+			if !strings.Contains(xml, "<scan:XResolution>300</scan:XResolution>") || !strings.Contains(xml, "<scan:YResolution>300</scan:YResolution>") {
+				t.Fatalf("ticket does not contain 300 DPI X/Y resolution: %s", xml)
+			}
 			if test.duplexElement == "" {
 				if strings.Contains(xml, "<scan:Duplex>") {
 					t.Fatalf("platen ticket contains duplex setting: %s", xml)
