@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/slobbe/collate/internal/scanner"
+	"github.com/slobbe/collate/internal/collate"
 )
 
 func TestBuildScanRequestMapsSources(t *testing.T) {
@@ -21,10 +21,10 @@ func TestBuildScanRequestMapsSources(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ticket, err := buildScanRequest(scanner.ScanOptions{
+			ticket, err := buildScanRequest(collate.ScanOptions{
 				Source:     test.source,
 				Mode:       "RGB24",
-				Paper:      scanner.PaperA4,
+				Paper:      collate.Paper{WidthMicrometres: 210_000, HeightMicrometres: 297_000},
 				Resolution: 300,
 			})
 			if err != nil {
@@ -50,10 +50,11 @@ func TestBuildScanRequestMapsSources(t *testing.T) {
 }
 
 func TestBuildScanRequestRejectsInvalidOptions(t *testing.T) {
-	tests := []scanner.ScanOptions{
-		{Source: "unknown", Mode: "RGB24", Paper: scanner.PaperA4, Resolution: 300},
-		{Source: "Platen", Paper: scanner.PaperA4, Resolution: 300},
-		{Source: "Platen", Mode: "RGB24", Paper: scanner.PaperA4},
+	paper := collate.Paper{WidthMicrometres: 210_000, HeightMicrometres: 297_000}
+	tests := []collate.ScanOptions{
+		{Source: "unknown", Mode: "RGB24", Paper: paper, Resolution: 300},
+		{Source: "Platen", Paper: paper, Resolution: 300},
+		{Source: "Platen", Mode: "RGB24", Paper: paper},
 		{Source: "Platen", Mode: "RGB24", Resolution: 300},
 	}
 

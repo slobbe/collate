@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/slobbe/collate/internal/scanner"
+	"github.com/slobbe/collate/internal/collate"
 )
 
 type scanResult struct {
@@ -71,4 +71,4 @@ func (r *scanResult) Close() error {
 	return err
 }
 
-var _ scanner.ScanResult = (*scanResult)(nil)
+var _ collate.ScanResult = (*scanResult)(nil)

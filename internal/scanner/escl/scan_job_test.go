@@ -9,7 +9,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/slobbe/collate/internal/scanner"
+	"github.com/slobbe/collate/internal/collate"
 )
 
 func TestScanJobLifecycle(t *testing.T) {
@@ -40,10 +40,10 @@ func TestScanJobLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	jobURL, err := createScanJob(ctx, server.Client(), baseURL, scanner.ScanOptions{
+	jobURL, err := createScanJob(ctx, server.Client(), baseURL, collate.ScanOptions{
 		Source:     "Platen",
 		Mode:       "RGB24",
-		Paper:      scanner.PaperA4,
+		Paper:      collate.Paper{WidthMicrometres: 210_000, HeightMicrometres: 297_000},
 		Resolution: 300,
 	})
 	if err != nil {

@@ -9,10 +9,10 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/slobbe/collate/internal/scanner"
+	"github.com/slobbe/collate/internal/collate"
 )
 
-func createScanJob(ctx context.Context, client *http.Client, baseURL *url.URL, options scanner.ScanOptions) (*url.URL, error) {
+func createScanJob(ctx context.Context, client *http.Client, baseURL *url.URL, options collate.ScanOptions) (*url.URL, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

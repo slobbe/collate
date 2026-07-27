@@ -6,6 +6,8 @@ import (
 	"os/signal"
 
 	"github.com/slobbe/collate/internal/cli"
+	"github.com/slobbe/collate/internal/collate"
+	"github.com/slobbe/collate/internal/scanner/escl"
 )
 
 var version = "dev"
@@ -17,7 +19,8 @@ func main() {
 		stop()
 	}()
 
-	exitCode := cli.Run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, version)
+	scans := collate.NewScanService(escl.NewProvider())
+	exitCode := cli.Run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, scans, version)
 	stop()
 	os.Exit(exitCode)
 }

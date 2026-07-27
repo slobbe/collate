@@ -11,18 +11,17 @@ import (
 
 	clicomponent "github.com/slobbe/collate/internal/cli/components"
 	"github.com/slobbe/collate/internal/collate"
-	"github.com/slobbe/collate/internal/scanner"
 	"github.com/slobbe/collate/internal/utils"
 )
 
-type startScan func(context.Context, string, scanner.ScanOptions) (*collate.ScanSession, error)
-type discoverScannerInfos func(context.Context) ([]scanner.Info, error)
-type scannerCapabilities func(context.Context, string) (scanner.Capabilities, error)
+type startScan func(context.Context, string, collate.ScanOptions) (*collate.ScanSession, error)
+type discoverScannerInfos func(context.Context) ([]collate.ScannerInfo, error)
+type scannerCapabilities func(context.Context, string) (collate.Capabilities, error)
 type clock func() time.Time
 
 // RunScan interactively acquires front and optional back pages from a scanner and saves a PDF.
-func RunScan(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	return runScan(ctx, args, stdin, stdout, stderr, collate.StartScanByID, collate.DiscoverScanners, collate.ScannerCapabilities, time.Now)
+func RunScan(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, scans *collate.ScanService) int {
+	return runScan(ctx, args, stdin, stdout, stderr, scans.StartScanByID, scans.DiscoverScanners, scans.ScannerCapabilities, time.Now)
 }
 
 func runScan(
@@ -71,7 +70,7 @@ func runScan(
 	}
 
 	input := bufio.NewReader(stdin)
-	var infos []scanner.Info
+	var infos []collate.ScannerInfo
 	err := (clicomponent.Waiting{Message: "Discovering scanners"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
 		var discoverErr error
 		infos, discoverErr = discover(ctx)
@@ -85,7 +84,7 @@ func runScan(
 		return reportScanError(stderr, err)
 	}
 
-	var capabilities scanner.Capabilities
+	var capabilities collate.Capabilities
 	err = (clicomponent.Waiting{Message: "Loading scanner capabilities"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
 		var capabilitiesErr error
 		capabilities, capabilitiesErr = capabilitiesFor(ctx, device.ID)

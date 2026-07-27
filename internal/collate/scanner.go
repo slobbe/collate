@@ -1,54 +1,65 @@
-package scanner
+package collate
 
 import "context"
 
-// Info identifies a scanner and provides its user-facing name.
-type Info struct {
+// ScannerInfo identifies a scanner available to Collate.
+type ScannerInfo struct {
 	ID   string
 	Name string
 }
 
 // Scanner acquires scans from a physical or network device.
 type Scanner interface {
-	Info() Info
+	Info() ScannerInfo
 	Capabilities(ctx context.Context) (Capabilities, error)
 	Scan(ctx context.Context, options ScanOptions) (ScanResult, error)
 }
 
-// ScanResult owns the files produced by a single scan operation.
+// ScannerProvider discovers scanners supported by the active adapters.
+type ScannerProvider interface {
+	Discover(ctx context.Context) ([]Scanner, error)
+}
+
+// ScanResult owns files produced by a single scan operation.
 type ScanResult interface {
 	SavePDF(ctx context.Context, path string) error
 	Close() error
 }
 
+// Capabilities describes the supported settings for a scanner.
 type Capabilities struct {
-	Sources []Source
+	Sources []ScanSource
 }
 
-// Source is a scanner-specific input source.
-type Source struct {
+// ScanSource is a scanner input source and its supported settings.
+type ScanSource struct {
 	ID     string
 	Name   string
 	Feeder bool
 	Duplex bool
 
 	ColorModes  []string
-	Resolutions []int // DPI
-	Dimensions  struct {
-		MinWidth  int // micrometres
-		MinHeight int // micrometres
-		MaxWidth  int // micrometres
-		MaxHeight int // micrometres
-	}
+	Resolutions []int
+	Dimensions  ScanDimensions
 }
 
+// ScanDimensions describes the source's supported scan area in micrometres.
+type ScanDimensions struct {
+	MinWidth  int
+	MinHeight int
+	MaxWidth  int
+	MaxHeight int
+}
+
+// ScanOptions describes one scan operation.
 type ScanOptions struct {
 	Source     string
 	Mode       string
 	Paper      Paper
-	Resolution int // DPI
+	Resolution int
 }
 
+// Paper describes a paper format in micrometres.
 type Paper struct {
 	ID   string
 	Name string
@@ -64,14 +75,12 @@ var (
 		WidthMicrometres:  210_000,
 		HeightMicrometres: 297_000,
 	}
-
 	PaperA5 = Paper{
 		ID:                "a5",
 		Name:              "A5",
 		WidthMicrometres:  148_000,
 		HeightMicrometres: 210_000,
 	}
-
 	PaperLetter = Paper{
 		ID:                "letter",
 		Name:              "Letter",

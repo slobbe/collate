@@ -14,7 +14,6 @@ import (
 
 	"github.com/slobbe/collate/internal/collate"
 	"github.com/slobbe/collate/internal/pdf"
-	"github.com/slobbe/collate/internal/scanner"
 )
 
 type scanTestResult struct {
@@ -46,22 +45,22 @@ func (r *scanTestResult) Close() error {
 }
 
 type scanTestScanner struct {
-	info        scanner.Info
+	info        collate.ScannerInfo
 	scanErr     error
-	scanOptions []scanner.ScanOptions
+	scanOptions []collate.ScanOptions
 	results     []*scanTestResult
 	nextResult  int
 }
 
-func (s *scanTestScanner) Info() scanner.Info {
-	return s.info
+func (s *scanTestScanner) Info() collate.ScannerInfo {
+	return collate.ScannerInfo{ID: s.info.ID, Name: s.info.Name}
 }
 
-func (s *scanTestScanner) Capabilities(context.Context) (scanner.Capabilities, error) {
-	return scanner.Capabilities{}, nil
+func (s *scanTestScanner) Capabilities(context.Context) (collate.Capabilities, error) {
+	return collate.Capabilities{}, nil
 }
 
-func (s *scanTestScanner) Scan(_ context.Context, options scanner.ScanOptions) (scanner.ScanResult, error) {
+func (s *scanTestScanner) Scan(_ context.Context, options collate.ScanOptions) (collate.ScanResult, error) {
 	s.scanOptions = append(s.scanOptions, options)
 	if s.scanErr != nil {
 		return nil, s.scanErr
@@ -74,8 +73,8 @@ func (s *scanTestScanner) Scan(_ context.Context, options scanner.ScanOptions) (
 	return result, nil
 }
 
-var testCapabilities = scanner.Capabilities{
-	Sources: []scanner.Source{
+var testCapabilities = collate.Capabilities{
+	Sources: []collate.ScanSource{
 		{
 			ID:          "Platen",
 			Name:        "Flatbed",
@@ -94,14 +93,14 @@ var testCapabilities = scanner.Capabilities{
 
 func TestRunScanUsesOnlyScannerAndDefaultOptions(t *testing.T) {
 	front := &scanTestResult{}
-	selected := &scanTestScanner{info: scanner.Info{ID: "scanner-1", Name: "Scanner One"}, results: []*scanTestResult{front}}
+	selected := &scanTestScanner{info: collate.ScannerInfo{ID: "scanner-1", Name: "Scanner One"}, results: []*scanTestResult{front}}
 
 	code, stdout, stderr := runScanCommand(
 		nil,
 		"\n\n\n\n\nn\n\n",
 		startFor(selected),
-		func(context.Context) ([]scanner.Info, error) {
-			return []scanner.Info{selected.info}, nil
+		func(context.Context) ([]collate.ScannerInfo, error) {
+			return []collate.ScannerInfo{selected.info}, nil
 		},
 		capabilitiesFor(testCapabilities),
 	)
@@ -109,7 +108,7 @@ func TestRunScanUsesOnlyScannerAndDefaultOptions(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("RunScan() exit code = %d, want 0", code)
 	}
-	if got, want := selected.scanOptions, []scanner.ScanOptions{{Source: "Platen", Paper: scanner.PaperA4, Mode: "RGB24", Resolution: 300}}; !equalOptions(got, want) {
+	if got, want := selected.scanOptions, []collate.ScanOptions{{Source: "Platen", Paper: collate.PaperA4, Mode: "RGB24", Resolution: 300}}; !equalOptions(got, want) {
 		t.Fatalf("scan options = %#v, want %#v", got, want)
 	}
 	if got, want := filepath.Base(front.savedPaths[0]), "scan_20260726_123456.pdf"; got != want {
@@ -127,13 +126,13 @@ func TestRunScanUsesOnlyScannerAndDefaultOptions(t *testing.T) {
 }
 
 func TestRunScanLetsUserSelectScannerAndOptions(t *testing.T) {
-	selected := &scanTestScanner{info: scanner.Info{ID: "scanner-2", Name: "Scanner Two"}}
+	selected := &scanTestScanner{info: collate.ScannerInfo{ID: "scanner-2", Name: "Scanner Two"}}
 	code, stdout, stderr := runScanCommand(
 		nil,
 		"2\n2\n3\n2\n2\n\nn\ncustom.pdf\n",
 		startFor(selected),
-		func(context.Context) ([]scanner.Info, error) {
-			return []scanner.Info{{ID: "scanner-1", Name: "Scanner One"}, selected.info}, nil
+		func(context.Context) ([]collate.ScannerInfo, error) {
+			return []collate.ScannerInfo{{ID: "scanner-1", Name: "Scanner One"}, selected.info}, nil
 		},
 		capabilitiesFor(testCapabilities),
 	)
@@ -141,7 +140,7 @@ func TestRunScanLetsUserSelectScannerAndOptions(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("RunScan() exit code = %d, want 0", code)
 	}
-	want := scanner.ScanOptions{Source: "ADF Simplex", Paper: scanner.PaperLetter, Mode: "Grayscale8", Resolution: 600}
+	want := collate.ScanOptions{Source: "ADF Simplex", Paper: collate.PaperLetter, Mode: "Grayscale8", Resolution: 600}
 	if got := selected.scanOptions[0]; got != want {
 		t.Fatalf("scan options = %#v, want %#v", got, want)
 	}
@@ -157,7 +156,7 @@ func TestRunScanLetsUserSelectScannerAndOptions(t *testing.T) {
 }
 
 func TestRunScanFlagsSkipScannerOptionAndOutputPrompts(t *testing.T) {
-	selected := &scanTestScanner{info: scanner.Info{ID: "scanner-2", Name: "Scanner Two"}}
+	selected := &scanTestScanner{info: collate.ScannerInfo{ID: "scanner-2", Name: "Scanner Two"}}
 	outputPath := filepath.Join(t.TempDir(), "flagged.pdf")
 
 	code, stdout, stderr := runScanCommand(
@@ -171,8 +170,8 @@ func TestRunScanFlagsSkipScannerOptionAndOutputPrompts(t *testing.T) {
 		},
 		"\nn\n",
 		startFor(selected),
-		func(context.Context) ([]scanner.Info, error) {
-			return []scanner.Info{{ID: "scanner-1", Name: "Scanner One"}, selected.info}, nil
+		func(context.Context) ([]collate.ScannerInfo, error) {
+			return []collate.ScannerInfo{{ID: "scanner-1", Name: "Scanner One"}, selected.info}, nil
 		},
 		capabilitiesFor(testCapabilities),
 	)
@@ -180,7 +179,7 @@ func TestRunScanFlagsSkipScannerOptionAndOutputPrompts(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("RunScan() exit code = %d, want 0; stderr = %q", code, stderr)
 	}
-	want := scanner.ScanOptions{Source: "ADF Simplex", Paper: scanner.PaperLetter, Mode: "Grayscale8", Resolution: 600}
+	want := collate.ScanOptions{Source: "ADF Simplex", Paper: collate.PaperLetter, Mode: "Grayscale8", Resolution: 600}
 	if got := selected.scanOptions[0]; got != want {
 		t.Fatalf("scan options = %#v, want %#v", got, want)
 	}
@@ -195,12 +194,12 @@ func TestRunScanFlagsSkipScannerOptionAndOutputPrompts(t *testing.T) {
 }
 
 func TestRunScanFlagRejectsUnsupportedResolution(t *testing.T) {
-	selected := &scanTestScanner{info: scanner.Info{ID: "scanner-1"}}
+	selected := &scanTestScanner{info: collate.ScannerInfo{ID: "scanner-1"}}
 	code, _, stderr := runScanCommand(
 		[]string{"--source", "platen", "--paper", "a4", "--mode", "RGB24", "--resolution", "1200"},
 		"",
 		startFor(selected),
-		func(context.Context) ([]scanner.Info, error) { return []scanner.Info{selected.info}, nil },
+		func(context.Context) ([]collate.ScannerInfo, error) { return []collate.ScannerInfo{selected.info}, nil },
 		capabilitiesFor(testCapabilities),
 	)
 
@@ -219,14 +218,14 @@ func TestRunScanCollatesBackPagesBeforeAskingForOutput(t *testing.T) {
 	dir := t.TempDir()
 	front := &scanTestResult{documentPath: createTestPDF(t, dir, "front.pdf")}
 	back := &scanTestResult{documentPath: createTestPDF(t, dir, "back.pdf")}
-	selected := &scanTestScanner{info: scanner.Info{ID: "scanner-1"}, results: []*scanTestResult{front, back}}
+	selected := &scanTestScanner{info: collate.ScannerInfo{ID: "scanner-1"}, results: []*scanTestResult{front, back}}
 	outputPath := filepath.Join(dir, "document.pdf")
 
 	code, stdout, stderr := runScanCommand(
 		nil,
 		"\n\n\n\n\ny\n\n\n"+outputPath+"\n",
 		startFor(selected),
-		func(context.Context) ([]scanner.Info, error) { return []scanner.Info{selected.info}, nil },
+		func(context.Context) ([]collate.ScannerInfo, error) { return []collate.ScannerInfo{selected.info}, nil },
 		capabilitiesFor(testCapabilities),
 	)
 
@@ -255,11 +254,11 @@ func TestRunScanReportsNoScanners(t *testing.T) {
 	code, _, stderr := runScanCommand(
 		nil,
 		"",
-		func(context.Context, string, scanner.ScanOptions) (*collate.ScanSession, error) {
+		func(context.Context, string, collate.ScanOptions) (*collate.ScanSession, error) {
 			t.Fatal("scan start was called")
 			return nil, nil
 		},
-		func(context.Context) ([]scanner.Info, error) { return nil, nil },
+		func(context.Context) ([]collate.ScannerInfo, error) { return nil, nil },
 		capabilitiesFor(testCapabilities),
 	)
 
@@ -275,12 +274,12 @@ func TestRunScanListsAvailableScanners(t *testing.T) {
 	code, stdout, stderr := runScanCommand(
 		[]string{"--device-list"},
 		"",
-		func(context.Context, string, scanner.ScanOptions) (*collate.ScanSession, error) {
+		func(context.Context, string, collate.ScanOptions) (*collate.ScanSession, error) {
 			t.Fatal("scan start was called")
 			return nil, nil
 		},
-		func(context.Context) ([]scanner.Info, error) {
-			return []scanner.Info{{Name: "Scanner One", ID: "scanner-1"}, {Name: "Scanner Two", ID: "scanner-2"}}, nil
+		func(context.Context) ([]collate.ScannerInfo, error) {
+			return []collate.ScannerInfo{{Name: "Scanner One", ID: "scanner-1"}, {Name: "Scanner Two", ID: "scanner-2"}}, nil
 		},
 		capabilitiesFor(testCapabilities),
 	)
@@ -298,12 +297,12 @@ func TestRunScanListsAvailableScanners(t *testing.T) {
 }
 
 func TestRunScanReportsScanFailure(t *testing.T) {
-	selected := &scanTestScanner{info: scanner.Info{ID: "scanner-1"}, scanErr: errors.New("device failure")}
+	selected := &scanTestScanner{info: collate.ScannerInfo{ID: "scanner-1"}, scanErr: errors.New("device failure")}
 	code, _, stderr := runScanCommand(
 		nil,
 		"\n\n\n\n\n",
 		startFor(selected),
-		func(context.Context) ([]scanner.Info, error) { return []scanner.Info{selected.info}, nil },
+		func(context.Context) ([]collate.ScannerInfo, error) { return []collate.ScannerInfo{selected.info}, nil },
 		capabilitiesFor(testCapabilities),
 	)
 
@@ -338,8 +337,8 @@ func createTestPDF(t *testing.T, dir, name string) string {
 	return pdfPath
 }
 
-func startFor(device scanner.Scanner) startScan {
-	return func(ctx context.Context, deviceID string, options scanner.ScanOptions) (*collate.ScanSession, error) {
+func startFor(device collate.Scanner) startScan {
+	return func(ctx context.Context, deviceID string, options collate.ScanOptions) (*collate.ScanSession, error) {
 		if device.Info().ID != deviceID {
 			return nil, errors.New("scanner not found")
 		}
@@ -347,8 +346,8 @@ func startFor(device scanner.Scanner) startScan {
 	}
 }
 
-func capabilitiesFor(capabilities scanner.Capabilities) scannerCapabilities {
-	return func(context.Context, string) (scanner.Capabilities, error) {
+func capabilitiesFor(capabilities collate.Capabilities) scannerCapabilities {
+	return func(context.Context, string) (collate.Capabilities, error) {
 		return capabilities, nil
 	}
 }
@@ -368,7 +367,7 @@ func runScanCommand(
 	return code, stdout.String(), stderr.String()
 }
 
-func equalOptions(left, right []scanner.ScanOptions) bool {
+func equalOptions(left, right []collate.ScanOptions) bool {
 	if len(left) != len(right) {
 		return false
 	}

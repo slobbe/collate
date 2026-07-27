@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/slobbe/collate/internal/scanner"
+	"github.com/slobbe/collate/internal/collate"
 )
 
 // AirScanner adapts an eSCL device to the generic scanner interface.
@@ -22,19 +22,42 @@ func New(device Device) *AirScanner {
 	}
 }
 
-func (s *AirScanner) Info() scanner.Info {
-	return scanner.Info{
+func (s *AirScanner) Info() collate.ScannerInfo {
+	return collate.ScannerInfo{
 		ID:   s.device.ID,
 		Name: s.device.Name,
 	}
 }
 
-func (s *AirScanner) Capabilities(ctx context.Context) (scanner.Capabilities, error) {
+func (s *AirScanner) Capabilities(ctx context.Context) (collate.Capabilities, error) {
 	return requestCapabilities(ctx, s.client, s.device.BaseURL)
 }
 
-func (s *AirScanner) Scan(ctx context.Context, options scanner.ScanOptions) (scanner.ScanResult, error) {
+func (s *AirScanner) Scan(ctx context.Context, options collate.ScanOptions) (collate.ScanResult, error) {
 	return performScan(ctx, s.client, s.device.BaseURL, s.workingDir, options)
 }
 
-var _ scanner.Scanner = (*AirScanner)(nil)
+// Provider discovers eSCL scanners and adapts them to the Collate scanner port.
+type Provider struct{}
+
+// NewProvider creates an eSCL scanner provider.
+func NewProvider() *Provider {
+	return &Provider{}
+}
+
+// Discover returns the eSCL scanners advertised on the local network.
+func (*Provider) Discover(ctx context.Context) ([]collate.Scanner, error) {
+	devices, err := Discover(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	scanners := make([]collate.Scanner, len(devices))
+	for index, device := range devices {
+		scanners[index] = New(device)
+	}
+	return scanners, nil
+}
+
+var _ collate.Scanner = (*AirScanner)(nil)
+var _ collate.ScannerProvider = (*Provider)(nil)
