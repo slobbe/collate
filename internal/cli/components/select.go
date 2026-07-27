@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -33,7 +32,7 @@ func (s Select[T]) Run(ctx context.Context, input *bufio.Reader, output io.Write
 	rewrite := isTerminal(output)
 	renderedLines := len(s.Options)
 	for index, option := range s.Options {
-		fmt.Fprintf(output, "[%d] %s\n", index+1, option.Label)
+		fmt.Fprintf(output, "[%d] %s (%v)\n", index+1, option.Label, option.Value)
 	}
 
 	for {
@@ -69,16 +68,7 @@ func (s Select[T]) Run(ctx context.Context, input *bufio.Reader, output io.Write
 		} else {
 			fmt.Fprintln(output)
 		}
-		fmt.Fprintf(output, "%s: %s\n", s.Prompt, s.Options[index].Label)
+		fmt.Fprintf(output, "%s: %s (%v)\n", s.Prompt, s.Options[index].Label, s.Options[index].Value)
 		return s.Options[index].Value, nil
 	}
-}
-
-func isTerminal(output io.Writer) bool {
-	file, ok := output.(*os.File)
-	if !ok {
-		return false
-	}
-	info, err := file.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
