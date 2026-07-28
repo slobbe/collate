@@ -49,7 +49,9 @@ func (t TextInput) Run(ctx context.Context, input *bufio.Reader, output io.Write
 		}
 
 		if rewrite {
-			fmt.Fprint(output, ansi.CursorUp(renderedLines), ansi.ClearScreenFromCursor)
+			if _, err := fmt.Fprint(output, ansi.CursorUp(renderedLines), ansi.ClearScreenFromCursor); err != nil {
+				return "", fmt.Errorf("rewrite input: %w", err)
+			}
 		} else {
 			fmt.Fprintln(output)
 		}

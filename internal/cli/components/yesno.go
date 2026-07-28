@@ -18,7 +18,9 @@ type YesNo struct {
 func (y YesNo) Run(ctx context.Context, input *bufio.Reader, output io.Writer) (bool, error) {
 	rewrite := ansi.IsTerminal(output)
 	if rewrite {
-		fmt.Fprint(output, ansi.SaveCursor)
+		if _, err := fmt.Fprint(output, ansi.SaveCursor); err != nil {
+			return false, fmt.Errorf("save cursor: %w", err)
+		}
 	}
 
 	choices := "y/N"
@@ -50,7 +52,9 @@ func (y YesNo) Run(ctx context.Context, input *bufio.Reader, output io.Writer) (
 		}
 
 		if rewrite {
-			fmt.Fprint(output, ansi.RestoreCursor, ansi.ClearScreenFromCursor)
+			if _, err := fmt.Fprint(output, ansi.RestoreCursor, ansi.ClearScreenFromCursor); err != nil {
+				return false, fmt.Errorf("restore cursor: %w", err)
+			}
 		} else {
 			fmt.Fprintln(output)
 		}
