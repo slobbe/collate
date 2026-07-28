@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/slobbe/collate/pkg/ansi"
 )
 
 type TextInput struct {
@@ -15,7 +17,7 @@ type TextInput struct {
 }
 
 func (t TextInput) Run(ctx context.Context, input *bufio.Reader, output io.Writer) (string, error) {
-	rewrite := isTerminal(output)
+	rewrite := ansi.IsTerminal(output)
 	renderedLines := 0
 
 	for {
@@ -47,7 +49,7 @@ func (t TextInput) Run(ctx context.Context, input *bufio.Reader, output io.Write
 		}
 
 		if rewrite {
-			fmt.Fprintf(output, "\x1b[%dA\x1b[J", renderedLines)
+			fmt.Fprint(output, ansi.CursorUp(renderedLines), ansi.ClearScreenFromCursor)
 		} else {
 			fmt.Fprintln(output)
 		}

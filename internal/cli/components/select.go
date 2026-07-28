@@ -7,6 +7,8 @@ import (
 	"io"
 	"strconv"
 	"strings"
+
+	"github.com/slobbe/collate/pkg/ansi"
 )
 
 type Select[T any] struct {
@@ -29,7 +31,7 @@ func (s Select[T]) Run(ctx context.Context, input *bufio.Reader, output io.Write
 		return zero, fmt.Errorf("%s default %d is out of range", s.Prompt, s.Default)
 	}
 
-	rewrite := isTerminal(output)
+	rewrite := ansi.IsTerminal(output)
 	renderedLines := len(s.Options)
 	for index, option := range s.Options {
 		fmt.Fprintf(output, "[%d] %s\n", index+1, option.Label)
@@ -64,7 +66,7 @@ func (s Select[T]) Run(ctx context.Context, input *bufio.Reader, output io.Write
 		}
 
 		if rewrite {
-			fmt.Fprintf(output, "\x1b[%dA\x1b[J", renderedLines)
+			fmt.Fprint(output, ansi.CursorUp(renderedLines), ansi.ClearScreenFromCursor)
 		} else {
 			fmt.Fprintln(output)
 		}

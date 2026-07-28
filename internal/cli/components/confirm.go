@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+
+	"github.com/slobbe/collate/pkg/ansi"
 )
 
 type Confirm struct {
@@ -13,9 +15,9 @@ type Confirm struct {
 }
 
 func (c Confirm) Run(ctx context.Context, input *bufio.Reader, output io.Writer) error {
-	rewrite := isTerminal(output)
+	rewrite := ansi.IsTerminal(output)
 	if rewrite {
-		fmt.Fprint(output, "\x1b[s")
+		fmt.Fprint(output, ansi.SaveCursor)
 	}
 
 	fmt.Fprintf(output, "%s [press Enter]", c.Prompt)
@@ -25,7 +27,7 @@ func (c Confirm) Run(ctx context.Context, input *bufio.Reader, output io.Writer)
 	}
 
 	if rewrite {
-		fmt.Fprint(output, "\x1b[u\x1b[J")
+		fmt.Fprint(output, ansi.RestoreCursor, ansi.ClearScreenFromCursor)
 	} else {
 		fmt.Fprintln(output)
 	}
