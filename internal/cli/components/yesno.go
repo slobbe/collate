@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/slobbe/collate/pkg/ansi"
 )
 
 type YesNo struct {
@@ -14,9 +16,9 @@ type YesNo struct {
 }
 
 func (y YesNo) Run(ctx context.Context, input *bufio.Reader, output io.Writer) (bool, error) {
-	rewrite := isTerminal(output)
+	rewrite := ansi.IsTerminal(output)
 	if rewrite {
-		fmt.Fprint(output, "\x1b[s")
+		fmt.Fprint(output, ansi.SaveCursor)
 	}
 
 	choices := "y/N"
@@ -48,7 +50,7 @@ func (y YesNo) Run(ctx context.Context, input *bufio.Reader, output io.Writer) (
 		}
 
 		if rewrite {
-			fmt.Fprint(output, "\x1b[u\x1b[J")
+			fmt.Fprint(output, ansi.RestoreCursor, ansi.ClearScreenFromCursor)
 		} else {
 			fmt.Fprintln(output)
 		}

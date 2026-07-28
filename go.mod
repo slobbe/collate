@@ -5,6 +5,7 @@ go 1.25.11
 require (
 	github.com/hashicorp/mdns v1.0.7
 	github.com/pdfcpu/pdfcpu v0.13.0
+	golang.org/x/term v0.43.0
 )
 
 require (
