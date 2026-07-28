@@ -52,11 +52,16 @@ func (w Waiting) Run(ctx context.Context, output io.Writer, action func(context.
 	ticker := time.NewTicker(spinnerInterval)
 	defer ticker.Stop()
 	frame := 0
-	render := func() {
-		fmt.Fprintf(output, "\r%s%s %s", ansi.ClearLine, spinnerFrames[frame], w.Message)
+	render := func() error {
+		if _, err := fmt.Fprintf(output, "\r%s%s %s", ansi.ClearLine, spinnerFrames[frame], w.Message); err != nil {
+			return fmt.Errorf("render waiting indicator: %w", err)
+		}
 		frame = (frame + 1) % len(spinnerFrames)
+		return nil
 	}
-	render()
+	if err := render(); err != nil {
+		return err
+	}
 
 	for {
 		select {
@@ -67,7 +72,9 @@ func (w Waiting) Run(ctx context.Context, output io.Writer, action func(context.
 			}
 			return errors.Join(result.err, cleanupErr)
 		case <-ticker.C:
-			render()
+			if err := render(); err != nil {
+				return err
+			}
 		case <-ctx.Done():
 			_, cleanupErr := fmt.Fprint(output, "\r", ansi.ClearLine)
 			return errors.Join(ctx.Err(), cleanupErr)

@@ -66,7 +66,9 @@ func (s Select[T]) Run(ctx context.Context, input *bufio.Reader, output io.Write
 		}
 
 		if rewrite {
-			fmt.Fprint(output, ansi.CursorUp(renderedLines), ansi.ClearScreenFromCursor)
+			if _, err := fmt.Fprint(output, ansi.CursorUp(renderedLines), ansi.ClearScreenFromCursor); err != nil {
+				return zero, fmt.Errorf("rewrite selection: %w", err)
+			}
 		} else {
 			fmt.Fprintln(output)
 		}
