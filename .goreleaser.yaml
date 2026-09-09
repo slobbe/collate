@@ -2,6 +2,9 @@ version: 2
 
 project_name: collate
 
+release:
+  name_template: "collate {{ .Tag }}"
+
 builds:
   - id: collate
     main: ./cmd/collate
