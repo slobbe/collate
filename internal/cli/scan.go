@@ -102,17 +102,22 @@ func runScan(
 		return reportScanError(stderr, err)
 	}
 	var session *collate.ScanSession
-	err = (clicomponent.Waiting{Message: "Scanning front pages"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
-		var scanErr error
-		session, scanErr = start(ctx, device.ID, options)
-		return "Scanned front pages", scanErr
+	completed, scanErr := runRetriableScan(ctx, input, stdout, "front pages", func(ctx context.Context) (string, error) {
+		var err error
+		session, err = start(ctx, device.ID, options)
+		return "Scanned front pages", err
 	})
-	if err != nil {
-		return reportScanError(stderr, err)
+	if scanErr != nil {
+		return reportScanError(stderr, scanErr)
+	}
+	if !completed {
+		return reportScanError(stderr, fmt.Errorf("front pages were not scanned"))
 	}
 	defer session.Close()
 
 	hasBackPages := false
+	recovering := false
+scanChunks:
 	for {
 		scanBack, err := (clicomponent.YesNo{Prompt: "Scan back pages too?"}).Run(ctx, input, stdout)
 		if err != nil {
@@ -127,10 +132,15 @@ func runScan(
 			if err := (clicomponent.Confirm{Prompt: "Load the back pages", Done: "Ready"}).Run(ctx, input, stdout); err != nil {
 				return reportScanError(stderr, err)
 			}
-			if err := (clicomponent.Waiting{Message: "Scanning back pages"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
+			completed, err := runRetriableScan(ctx, input, stdout, "back pages", func(ctx context.Context) (string, error) {
 				return "Scanned back pages", session.ScanBackInOrder(ctx, backOrder)
-			}); err != nil {
+			})
+			if err != nil {
 				return reportScanError(stderr, err)
+			}
+			if !completed {
+				recovering = true
+				break scanChunks
 			}
 		}
 
@@ -144,10 +154,15 @@ func runScan(
 		if err := (clicomponent.Confirm{Prompt: "Load the front pages", Done: "Ready"}).Run(ctx, input, stdout); err != nil {
 			return reportScanError(stderr, err)
 		}
-		if err := (clicomponent.Waiting{Message: "Scanning front pages"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
+		completed, err := runRetriableScan(ctx, input, stdout, "front pages", func(ctx context.Context) (string, error) {
 			return "Scanned front pages", session.ScanNextChunk(ctx)
-		}); err != nil {
+		})
+		if err != nil {
 			return reportScanError(stderr, err)
+		}
+		if !completed {
+			recovering = true
+			break scanChunks
 		}
 	}
 
@@ -162,6 +177,9 @@ func runScan(
 	}
 	err = (clicomponent.Waiting{Message: "Saving PDF"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
 		err := session.Save(ctx, outputPath)
+		if recovering {
+			return fmt.Sprintf("Saved completed pages successfully: %s", outputPath), err
+		}
 		if hasBackPages {
 			return fmt.Sprintf("Scanned and collated successfully: %s", outputPath), err
 		}
@@ -171,6 +189,36 @@ func runScan(
 		return reportScanError(stderr, err)
 	}
 	return 0
+}
+
+func runRetriableScan(
+	ctx context.Context,
+	input *bufio.Reader,
+	output io.Writer,
+	pages string,
+	action func(context.Context) (string, error),
+) (bool, error) {
+	for {
+		err := (clicomponent.Waiting{Message: "Scanning " + pages}).Run(ctx, output, action)
+		if err == nil {
+			return true, nil
+		}
+		if errors.Is(err, context.Canceled) {
+			return false, err
+		}
+		fmt.Fprintf(output, "Scanning %s failed: %v\n", pages, err)
+
+		retry, promptErr := (clicomponent.YesNo{Prompt: "Retry scanning " + pages + "?", Default: true}).Run(ctx, input, output)
+		if promptErr != nil {
+			return false, errors.Join(err, promptErr)
+		}
+		if !retry {
+			return false, nil
+		}
+		if err := (clicomponent.Confirm{Prompt: "Reload the " + pages, Done: "Ready"}).Run(ctx, input, output); err != nil {
+			return false, err
+		}
+	}
 }
 
 func runDeviceList(ctx context.Context, stdout, stderr io.Writer, discover discoverScannerInfos) int {

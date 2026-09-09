@@ -47,6 +47,7 @@ func (r *scanTestResult) Close() error {
 type scanTestScanner struct {
 	info        collate.ScannerInfo
 	scanErr     error
+	scanErrors  []error
 	scanOptions []collate.ScanOptions
 	results     []*scanTestResult
 	nextResult  int
@@ -64,6 +65,10 @@ func (s *scanTestScanner) Scan(_ context.Context, options collate.ScanOptions) (
 	s.scanOptions = append(s.scanOptions, options)
 	if s.scanErr != nil {
 		return nil, s.scanErr
+	}
+	callIndex := len(s.scanOptions) - 1
+	if callIndex < len(s.scanErrors) && s.scanErrors[callIndex] != nil {
+		return nil, s.scanErrors[callIndex]
 	}
 	if s.nextResult == len(s.results) {
 		s.results = append(s.results, &scanTestResult{})
@@ -374,6 +379,85 @@ func TestRunScanCombinesSimplexAndDuplexChunks(t *testing.T) {
 		if !result.closed {
 			t.Fatalf("scan result %d was not closed", index+1)
 		}
+	}
+}
+
+func TestRunScanRetriesFailedChunkWithoutLosingCompletedPages(t *testing.T) {
+	dir := t.TempDir()
+	first := &scanTestResult{documentPath: createTestPDF(t, dir, "first.pdf")}
+	second := &scanTestResult{documentPath: createTestPDF(t, dir, "second.pdf")}
+	selected := &scanTestScanner{
+		info:       collate.ScannerInfo{ID: "scanner-1"},
+		results:    []*scanTestResult{first, second},
+		scanErrors: []error{nil, errors.New("temporary timeout"), nil},
+	}
+	outputPath := filepath.Join(dir, "document.pdf")
+
+	code, stdout, stderr := runScanCommand(
+		nil,
+		"\n\n\n\n\nn\ny\n\n\n\nn\nn\n"+outputPath+"\n",
+		startFor(selected),
+		func(context.Context) ([]collate.ScannerInfo, error) { return []collate.ScannerInfo{selected.info}, nil },
+		capabilitiesFor(testCapabilities),
+	)
+
+	if code != 0 {
+		t.Fatalf("RunScan() exit code = %d, want 0; stderr = %q", code, stderr)
+	}
+	output, err := pdf.Open(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := output.PageCount(), 2; got != want {
+		t.Fatalf("page count = %d, want %d", got, want)
+	}
+	if !strings.Contains(stdout, "Scanning front pages failed: temporary timeout") || !strings.Contains(stdout, "Retry scanning front pages?") {
+		t.Fatalf("stdout = %q, want retry guidance", stdout)
+	}
+	if !first.closed || !second.closed {
+		t.Fatal("successful scan results were not closed")
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestRunScanSavesCompletedPagesWhenRetryIsDeclined(t *testing.T) {
+	dir := t.TempDir()
+	first := &scanTestResult{documentPath: createTestPDF(t, dir, "first.pdf")}
+	selected := &scanTestScanner{
+		info:       collate.ScannerInfo{ID: "scanner-1"},
+		results:    []*scanTestResult{first},
+		scanErrors: []error{nil, errors.New("temporary timeout")},
+	}
+	outputPath := filepath.Join(dir, "recovered.pdf")
+
+	code, stdout, stderr := runScanCommand(
+		nil,
+		"\n\n\n\n\nn\ny\n\nn\n"+outputPath+"\n",
+		startFor(selected),
+		func(context.Context) ([]collate.ScannerInfo, error) { return []collate.ScannerInfo{selected.info}, nil },
+		capabilitiesFor(testCapabilities),
+	)
+
+	if code != 0 {
+		t.Fatalf("RunScan() exit code = %d, want 0; stderr = %q", code, stderr)
+	}
+	output, err := pdf.Open(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := output.PageCount(), 1; got != want {
+		t.Fatalf("page count = %d, want %d", got, want)
+	}
+	if !strings.Contains(stdout, "Saved completed pages successfully: "+outputPath) {
+		t.Fatalf("stdout = %q, want recovered-pages confirmation", stdout)
+	}
+	if !first.closed {
+		t.Fatal("successful scan result was not closed")
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
 	}
 }
 

@@ -22,8 +22,8 @@ func TestNewUsesDedicatedClientForLocalHTTPSDevice(t *testing.T) {
 	if scanner.client == http.DefaultClient {
 		t.Fatal("New reused http.DefaultClient")
 	}
-	if scanner.client.Timeout != scannerHTTPTimeout {
-		t.Fatalf("client timeout = %s, want %s", scanner.client.Timeout, scannerHTTPTimeout)
+	if scanner.client.Timeout != 0 {
+		t.Fatalf("client timeout = %s, want no whole-request timeout", scanner.client.Timeout)
 	}
 	transport, ok := scanner.client.Transport.(*http.Transport)
 	if !ok {

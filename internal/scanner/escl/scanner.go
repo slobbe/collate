@@ -7,12 +7,9 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/slobbe/collate/internal/collate"
 )
-
-const scannerHTTPTimeout = 2 * time.Minute
 
 // AirScanner adapts an eSCL device to the generic scanner interface.
 type AirScanner struct {
@@ -32,10 +29,7 @@ func New(device Device) *AirScanner {
 	allowSelfSigned := device.BaseURL != nil && strings.EqualFold(device.BaseURL.Scheme, "https") && isLocalHost(device.BaseURL.Hostname())
 	transport.TLSClientConfig.InsecureSkipVerify = allowSelfSigned
 
-	client := &http.Client{
-		Transport: transport,
-		Timeout:   scannerHTTPTimeout,
-	}
+	client := &http.Client{Transport: transport}
 	if allowSelfSigned {
 		scheme, host := device.BaseURL.Scheme, device.BaseURL.Host
 		client.CheckRedirect = func(request *http.Request, _ []*http.Request) error {
