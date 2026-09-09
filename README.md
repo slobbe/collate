@@ -14,6 +14,8 @@ Make an interactive scan:
 collate scan [flags]
 ```
 
+After each front and optional back scan, Collate asks whether to scan another chunk. All chunks use the selected scanner settings and are saved together as one PDF in scan order. Each chunk may independently contain only front pages or both front and back pages.
+
 Optional flags:
 
 - `--device <device>`: Select a scanner by its advertised name or device URL.

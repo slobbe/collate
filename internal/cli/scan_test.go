@@ -136,7 +136,7 @@ func TestRunScanUsesOnlyScannerAndDefaultOptions(t *testing.T) {
 
 	code, stdout, stderr := runScanCommand(
 		nil,
-		"\n\n\n\n\nn\n\n",
+		"\n\n\n\n\nn\nn\n\n",
 		startFor(selected),
 		func(context.Context) ([]collate.ScannerInfo, error) {
 			return []collate.ScannerInfo{selected.info}, nil
@@ -168,7 +168,7 @@ func TestRunScanLetsUserSelectScannerAndOptions(t *testing.T) {
 	selected := &scanTestScanner{info: collate.ScannerInfo{ID: "scanner-2", Name: "Scanner Two"}}
 	code, stdout, stderr := runScanCommand(
 		nil,
-		"2\n2\n3\n2\n2\n\nn\ncustom.pdf\n",
+		"2\n2\n3\n2\n2\n\nn\nn\ncustom.pdf\n",
 		startFor(selected),
 		func(context.Context) ([]collate.ScannerInfo, error) {
 			return []collate.ScannerInfo{{ID: "scanner-1", Name: "Scanner One"}, selected.info}, nil
@@ -207,7 +207,7 @@ func TestRunScanFlagsSkipScannerOptionAndOutputPrompts(t *testing.T) {
 			"--resolution", "600",
 			"--output", outputPath,
 		},
-		"\nn\n",
+		"\nn\nn\n",
 		startFor(selected),
 		func(context.Context) ([]collate.ScannerInfo, error) {
 			return []collate.ScannerInfo{{ID: "scanner-1", Name: "Scanner One"}, selected.info}, nil
@@ -262,7 +262,7 @@ func TestRunScanCollatesBackPagesBeforeAskingForOutput(t *testing.T) {
 
 	code, stdout, stderr := runScanCommand(
 		nil,
-		"\n\n\n\n\ny\n\n\n"+outputPath+"\n",
+		"\n\n\n\n\ny\n\n\nn\n"+outputPath+"\n",
 		startFor(selected),
 		func(context.Context) ([]collate.ScannerInfo, error) { return []collate.ScannerInfo{selected.info}, nil },
 		capabilitiesFor(testCapabilities),
@@ -286,6 +286,94 @@ func TestRunScanCollatesBackPagesBeforeAskingForOutput(t *testing.T) {
 	}
 	if stderr != "" {
 		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestRunScanCombinesMultipleDuplexChunks(t *testing.T) {
+	dir := t.TempDir()
+	frontOne := &scanTestResult{documentPath: createTestPDF(t, dir, "front-one.pdf")}
+	backOne := &scanTestResult{documentPath: createTestPDF(t, dir, "back-one.pdf")}
+	frontTwo := &scanTestResult{documentPath: createTestPDF(t, dir, "front-two.pdf")}
+	backTwo := &scanTestResult{documentPath: createTestPDF(t, dir, "back-two.pdf")}
+	results := []*scanTestResult{frontOne, backOne, frontTwo, backTwo}
+	selected := &scanTestScanner{info: collate.ScannerInfo{ID: "scanner-1"}, results: results}
+	outputPath := filepath.Join(dir, "document.pdf")
+
+	code, stdout, stderr := runScanCommand(
+		nil,
+		"\n\n\n\n\ny\n\n\ny\n\ny\n\n\nn\n"+outputPath+"\n",
+		startFor(selected),
+		func(context.Context) ([]collate.ScannerInfo, error) { return []collate.ScannerInfo{selected.info}, nil },
+		capabilitiesFor(testCapabilities),
+	)
+
+	if code != 0 {
+		t.Fatalf("RunScan() exit code = %d, want 0; stderr = %q", code, stderr)
+	}
+	output, err := pdf.Open(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := output.PageCount(), 4; got != want {
+		t.Fatalf("page count = %d, want %d", got, want)
+	}
+	wantOptions := []collate.ScanOptions{
+		{Source: "Platen", Paper: collate.PaperA4, Mode: "RGB24", Resolution: 300},
+		{Source: "Platen", Paper: collate.PaperA4, Mode: "RGB24", Resolution: 300},
+		{Source: "Platen", Paper: collate.PaperA4, Mode: "RGB24", Resolution: 300},
+		{Source: "Platen", Paper: collate.PaperA4, Mode: "RGB24", Resolution: 300},
+	}
+	if !equalOptions(selected.scanOptions, wantOptions) {
+		t.Fatalf("scan options = %#v, want %#v", selected.scanOptions, wantOptions)
+	}
+	if got := strings.Count(stdout, "Scan another chunk? [y/N]"); got != 2 {
+		t.Fatalf("another chunk prompt count = %d, want 2; stdout = %q", got, stdout)
+	}
+	if secondFront, firstAnother := strings.LastIndex(stdout, "Load the front pages: Ready"), strings.Index(stdout, "Scan another chunk?"); secondFront < firstAnother {
+		t.Fatalf("second front scan was prompted before asking for another chunk: %q", stdout)
+	}
+	for index, result := range results {
+		if !result.closed {
+			t.Fatalf("scan result %d was not closed", index+1)
+		}
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+}
+
+func TestRunScanCombinesSimplexAndDuplexChunks(t *testing.T) {
+	dir := t.TempDir()
+	results := []*scanTestResult{
+		{documentPath: createTestPDF(t, dir, "simplex.pdf")},
+		{documentPath: createTestPDF(t, dir, "duplex-front.pdf")},
+		{documentPath: createTestPDF(t, dir, "duplex-back.pdf")},
+	}
+	selected := &scanTestScanner{info: collate.ScannerInfo{ID: "scanner-1"}, results: results}
+	outputPath := filepath.Join(dir, "document.pdf")
+
+	code, _, stderr := runScanCommand(
+		nil,
+		"\n\n\n\n\nn\ny\n\ny\n2\n\nn\n"+outputPath+"\n",
+		startFor(selected),
+		func(context.Context) ([]collate.ScannerInfo, error) { return []collate.ScannerInfo{selected.info}, nil },
+		capabilitiesFor(testCapabilities),
+	)
+
+	if code != 0 {
+		t.Fatalf("RunScan() exit code = %d, want 0; stderr = %q", code, stderr)
+	}
+	output, err := pdf.Open(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := output.PageCount(), 3; got != want {
+		t.Fatalf("page count = %d, want %d", got, want)
+	}
+	for index, result := range results {
+		if !result.closed {
+			t.Fatalf("scan result %d was not closed", index+1)
+		}
 	}
 }
 

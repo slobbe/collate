@@ -112,22 +112,40 @@ func runScan(
 	}
 	defer session.Close()
 
-	scanBack, err := (clicomponent.YesNo{Prompt: "Scan back pages too?"}).Run(ctx, input, stdout)
-	if err != nil {
-		return reportScanError(stderr, err)
-	}
-
-	backOrder := collate.BackOrderReverse
-	if scanBack {
-		backOrder, err = promptBackOrder(ctx, input, stdout)
+	hasBackPages := false
+	for {
+		scanBack, err := (clicomponent.YesNo{Prompt: "Scan back pages too?"}).Run(ctx, input, stdout)
 		if err != nil {
 			return reportScanError(stderr, err)
 		}
-		if err := (clicomponent.Confirm{Prompt: "Load the back pages", Done: "Ready"}).Run(ctx, input, stdout); err != nil {
+		if scanBack {
+			hasBackPages = true
+			backOrder, err := promptBackOrder(ctx, input, stdout)
+			if err != nil {
+				return reportScanError(stderr, err)
+			}
+			if err := (clicomponent.Confirm{Prompt: "Load the back pages", Done: "Ready"}).Run(ctx, input, stdout); err != nil {
+				return reportScanError(stderr, err)
+			}
+			if err := (clicomponent.Waiting{Message: "Scanning back pages"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
+				return "Scanned back pages", session.ScanBackInOrder(ctx, backOrder)
+			}); err != nil {
+				return reportScanError(stderr, err)
+			}
+		}
+
+		scanAnother, err := (clicomponent.YesNo{Prompt: "Scan another chunk?"}).Run(ctx, input, stdout)
+		if err != nil {
 			return reportScanError(stderr, err)
 		}
-		if err := (clicomponent.Waiting{Message: "Scanning back pages"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
-			return "Scanned back pages", session.ScanBack(ctx)
+		if !scanAnother {
+			break
+		}
+		if err := (clicomponent.Confirm{Prompt: "Load the front pages", Done: "Ready"}).Run(ctx, input, stdout); err != nil {
+			return reportScanError(stderr, err)
+		}
+		if err := (clicomponent.Waiting{Message: "Scanning front pages"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
+			return "Scanned front pages", session.ScanNextChunk(ctx)
 		}); err != nil {
 			return reportScanError(stderr, err)
 		}
@@ -143,11 +161,10 @@ func runScan(
 		return reportScanError(stderr, err)
 	}
 	err = (clicomponent.Waiting{Message: "Saving PDF"}).Run(ctx, stdout, func(ctx context.Context) (string, error) {
-		if scanBack {
-			err := session.Collate(ctx, outputPath, backOrder)
+		err := session.Save(ctx, outputPath)
+		if hasBackPages {
 			return fmt.Sprintf("Scanned and collated successfully: %s", outputPath), err
 		}
-		err := session.SaveFront(ctx, outputPath)
 		return fmt.Sprintf("Scanned successfully: %s", outputPath), err
 	})
 	if err != nil {
