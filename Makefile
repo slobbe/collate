@@ -11,7 +11,7 @@ DERIVED_VERSION := $(shell \
 			major=$${base%%.*}; rest=$${base#*.}; minor=$${rest%%.*}; patch=$${rest#*.}; \
 			count=$$(git rev-list --count "$$tag"..HEAD); sha=$$(git rev-parse --short HEAD); \
 			dirty=; [ -z "$$(git status --porcelain)" ] || dirty=.dirty; \
-			printf '%s.%s.%s-dev.%s+g%s%s' "$$major" "$$minor" "$$((patch + 1))" "$$count" "$$sha" "$$dirty"; \
+			printf '%s.%s.%s-dev.%s+%s%s' "$$major" "$$minor" "$$((patch + 1))" "$$count" "$$sha" "$$dirty"; \
 		fi; \
 	else \
 		printf 'dev'; \
